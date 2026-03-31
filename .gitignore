@@ -1,0 +1,5 @@
+/target/
+*.exe
+*.7z
+*.zip
+Cargo.lock
