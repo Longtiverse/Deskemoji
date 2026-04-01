@@ -32,25 +32,26 @@ const EMOJI_OPTIONS: &[(&str, &str)] = &[
     ("\u{1F319}", "晚安"),
 ];
 
-// 动画参数 - 更柔和自然
-const BOUNCE_GRAVITY: f32 = 0.8;  // 降低重力
-const BOUNCE_DECAY: f32 = 0.6;    // 增加衰减
-const BOUNCE_INITIAL_VELOCITY: f32 = -6.0;  // 降低初始速度
-const BOUNCE_MIN_VELOCITY: f32 = 0.5;
-const BREATH_SPEED: f32 = 0.04;   // 降低呼吸速度
-const BREATH_AMPLITUDE: f32 = 1.5;  // 降低幅度
-const EYE_TRACK_DISTANCE: f32 = 200.0;
-const EYE_TRACK_FACTOR: f32 = 80.0;  // 增加平滑度
-const EYE_MAX_OFFSET: f32 = 3.0;     // 降低最大偏移
-const EYE_DECAY: f32 = 0.85;         // 增加衰减
-const CLICK_DURATION_MS: u128 = 200;  // 延长点击动画
-const CLICK_SCALE_MAX: f32 = 0.1;     // 降低缩放幅度
+// 动画参数
+const BOUNCE_GRAVITY: f32 = 0.6;
+const BOUNCE_DECAY: f32 = 0.65;
+const BOUNCE_INITIAL_VELOCITY: f32 = -5.0;
+const BOUNCE_MIN_VELOCITY: f32 = 0.3;
+const BREATH_SPEED: f32 = 0.04;
+const BREATH_AMPLITUDE: f32 = 1.5;
+const EYE_MAX_OFFSET: f32 = 4.0;
+const EYE_DECAY: f32 = 0.85;
+const CLICK_DURATION_MS: u128 = 200;
+const CLICK_SCALE_MAX: f32 = 0.1;
 const WINDOW_MARGIN_RIGHT: i32 = 20;
 const WINDOW_MARGIN_BOTTOM: i32 = 60;
 const DEFAULT_POSITION: (i32, i32) = (100, 100);
-const FRAME_DURATION: Duration = Duration::from_millis(16);  // ~60fps
+const FRAME_DURATION: Duration = Duration::from_millis(16);
 
-// 菜单项
+const MAIN_WINDOW_SIZE: u32 = 160;
+const EMOJI_RADIUS: f32 = 55.0;
+const MAX_BOUNCE_OFFSET: f32 = 30.0;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum MenuItem {
     AutoMode,
@@ -60,101 +61,82 @@ enum MenuItem {
     Quit,
 }
 
-// 右键菜单状态
-struct ContextMenu {
+struct MenuState {
     visible: bool,
-    position: PhysicalPosition<i32>,
     items: Vec<(MenuItem, String)>,
     hovered: Option<usize>,
+    cursor_pos: PhysicalPosition<f64>,
 }
 
-impl ContextMenu {
+impl MenuState {
     fn new() -> Self {
         let mut items = Vec::new();
-        
-        // 自动模式
         items.push((MenuItem::AutoMode, "自动模式".to_string()));
-        
-        // 手动表情
         for (i, (emoji, name)) in EMOJI_OPTIONS.iter().enumerate() {
             items.push((MenuItem::ManualEmoji(i), format!("{} {}", emoji, name)));
         }
-        
-        // 设置
         items.push((MenuItem::Settings, "设置".to_string()));
         items.push((MenuItem::Startup, "开机启动".to_string()));
         items.push((MenuItem::Quit, "退出".to_string()));
         
         Self {
             visible: false,
-            position: PhysicalPosition::new(0, 0),
             items,
             hovered: None,
+            cursor_pos: PhysicalPosition::new(0.0, 0.0),
         }
     }
-    
-    fn show(&mut self, position: PhysicalPosition<i32>) {
+
+    fn show(&mut self, cursor_pos: PhysicalPosition<f64>) {
         self.visible = true;
-        self.position = position;
+        self.cursor_pos = cursor_pos;
         self.hovered = None;
     }
-    
+
     fn hide(&mut self) {
         self.visible = false;
         self.hovered = None;
     }
-    
-    fn handle_click(&self, x: i32, y: i32) -> Option<MenuItem> {
-        if !self.visible {
-            return None;
-        }
-        
-        let item_height = 30;
-        let menu_width = 150;
-        
-        // 检查是否在菜单范围内
-        if x < self.position.x || x > self.position.x + menu_width {
-            return None;
-        }
-        
-        let relative_y = y - self.position.y;
-        if relative_y < 0 {
-            return None;
-        }
-        
-        let item_index = relative_y as usize / item_height;
-        if item_index < self.items.len() {
-            return Some(self.items[item_index].0);
-        }
-        
-        None
-    }
-    
-    fn handle_hover(&mut self, x: i32, y: i32) {
+
+    fn handle_hover(&mut self, x: f64, y: f64) {
         if !self.visible {
             return;
         }
         
-        let item_height = 30;
-        let menu_width = 150;
+        let item_height = 32.0;
+        let relative_y = y - self.cursor_pos.y;
         
-        if x < self.position.x || x > self.position.x + menu_width {
+        if relative_y < 0.0 {
             self.hovered = None;
             return;
         }
         
-        let relative_y = y - self.position.y;
-        if relative_y < 0 {
-            self.hovered = None;
-            return;
-        }
-        
-        let item_index = relative_y as usize / item_height;
+        let item_index = (relative_y / item_height) as usize;
         if item_index < self.items.len() {
             self.hovered = Some(item_index);
         } else {
             self.hovered = None;
         }
+    }
+
+    fn handle_click(&self, x: f64, y: f64) -> Option<MenuItem> {
+        if !self.visible {
+            return None;
+        }
+        
+        let item_height = 32.0;
+        let relative_y = y - self.cursor_pos.y;
+        
+        if relative_y < 0.0 {
+            return None;
+        }
+        
+        let item_index = (relative_y / item_height) as usize;
+        if item_index < self.items.len() {
+            return Some(self.items[item_index].0);
+        }
+        
+        None
     }
 }
 
@@ -196,7 +178,6 @@ impl AnimState {
     }
 
     fn update(&mut self, cursor_pos: PhysicalPosition<f64>, window_center: (f32, f32)) -> bool {
-        // 限制更新频率
         if self.last_update.elapsed() < FRAME_DURATION {
             return false;
         }
@@ -204,10 +185,14 @@ impl AnimState {
         
         let mut changed = false;
 
-        // 弹跳物理 - 更自然的衰减
         if self.is_bouncing {
             self.bounce_velocity += BOUNCE_GRAVITY;
             self.bounce_offset += self.bounce_velocity;
+            
+            if self.bounce_offset < -MAX_BOUNCE_OFFSET {
+                self.bounce_offset = -MAX_BOUNCE_OFFSET;
+                self.bounce_velocity = 0.0;
+            }
             
             if self.bounce_offset >= 0.0 {
                 self.bounce_offset = 0.0;
@@ -221,13 +206,12 @@ impl AnimState {
             changed = true;
         }
 
-        // 呼吸效果 - 更平滑
         if self.is_hovering {
             self.breath_timer += BREATH_SPEED;
             changed = true;
         }
 
-        // 眼神跟随 - 更平滑的跟踪
+        // 全屏幕眼神跟随
         let dx = cursor_pos.x as f32 - window_center.0;
         let dy = cursor_pos.y as f32 - window_center.1;
         let dist = (dx * dx + dy * dy).sqrt();
@@ -235,14 +219,13 @@ impl AnimState {
         let old_eye_x = self.eye_offset_x;
         let old_eye_y = self.eye_offset_y;
         
-        if dist < EYE_TRACK_DISTANCE && dist > 1.0 {
-            let factor = (dist / EYE_TRACK_FACTOR).min(1.0);
+        if dist > 1.0 {
+            let factor = 1.0 - (-dist / 500.0).exp();
             let target_x = (dx / dist) * factor * EYE_MAX_OFFSET;
             let target_y = (dy / dist) * factor * EYE_MAX_OFFSET;
             
-            // 平滑插值
-            self.eye_offset_x += (target_x - self.eye_offset_x) * 0.15;
-            self.eye_offset_y += (target_y - self.eye_offset_y) * 0.15;
+            self.eye_offset_x += (target_x - self.eye_offset_x) * 0.12;
+            self.eye_offset_y += (target_y - self.eye_offset_y) * 0.12;
         } else {
             self.eye_offset_x *= EYE_DECAY;
             self.eye_offset_y *= EYE_DECAY;
@@ -252,12 +235,10 @@ impl AnimState {
             changed = true;
         }
 
-        // 点击缩放效果 - 更平滑
         let old_scale = self.click_scale;
         let click_elapsed = self.click_timer.elapsed().as_millis() as f32;
         if click_elapsed < CLICK_DURATION_MS as f32 {
             let t = click_elapsed / CLICK_DURATION_MS as f32;
-            // 使用平滑的 easing 函数
             let eased = 1.0 - (1.0 - t).powi(2);
             self.click_scale = 1.0 + CLICK_SCALE_MAX * (1.0 - eased) * (std::f32::consts::PI * t * 2.0).sin().abs();
         } else {
@@ -293,7 +274,7 @@ struct AppState {
     animating: bool,
     config: Config,
     manual_emoji: Option<char>,
-    context_menu: ContextMenu,
+    menu: MenuState,
     need_redraw: bool,
 }
 
@@ -303,7 +284,6 @@ impl AppState {
         let mut monitor = Monitor::new();
         let current_emoji = EmojiState::from_system_info(&monitor.get_info());
         let config = Config::load();
-        let context_menu = ContextMenu::new();
 
         Self {
             window,
@@ -317,7 +297,7 @@ impl AppState {
             animating: false,
             config,
             manual_emoji: None,
-            context_menu,
+            menu: MenuState::new(),
             need_redraw: true,
         }
     }
@@ -373,10 +353,8 @@ impl AppState {
         self.cursor_pos = position;
         self.last_activity = Instant::now();
         
-        // 更新菜单悬停状态
-        if self.context_menu.visible {
-            self.context_menu.handle_hover(position.x as i32, position.y as i32);
-            self.need_redraw = true;
+        if self.menu.visible {
+            self.menu.handle_hover(position.x, position.y);
         }
     }
 
@@ -384,15 +362,12 @@ impl AppState {
         match button {
             MouseButton::Left => {
                 if state == ElementState::Pressed {
-                    // 如果菜单可见，检查是否点击了菜单项
-                    if self.context_menu.visible {
-                        if let Some(action) = self.context_menu.handle_click(self.cursor_pos.x as i32, self.cursor_pos.y as i32) {
+                    if self.menu.visible {
+                        if let Some(action) = self.menu.handle_click(self.cursor_pos.x, self.cursor_pos.y) {
                             self.handle_menu_action(action);
                         }
-                        self.context_menu.hide();
-                        self.need_redraw = true;
+                        self.menu.hide();
                     } else {
-                        // 否则开始拖动
                         self.last_activity = Instant::now();
                         self.anim.trigger_bounce();
                         self.animating = true;
@@ -402,11 +377,11 @@ impl AppState {
             }
             MouseButton::Right => {
                 if state == ElementState::Released {
-                    // 显示右键菜单
-                    self.context_menu.show(PhysicalPosition::new(
-                        self.cursor_pos.x as i32,
-                        self.cursor_pos.y as i32,
-                    ));
+                    if self.menu.visible {
+                        self.menu.hide();
+                    } else {
+                        self.menu.show(self.cursor_pos);
+                    }
                     self.need_redraw = true;
                 }
             }
@@ -422,12 +397,14 @@ impl AppState {
             self.animating = true;
         } else {
             self.animating = false;
+            if self.menu.visible {
+                self.menu.hide();
+                self.need_redraw = true;
+            }
         }
-        self.need_redraw = true;
     }
 
     fn update(&mut self) -> bool {
-        // 更新系统信息
         if self.last_update.elapsed() >= Duration::from_secs(self.config.update_interval_secs) {
             self.monitor.update();
             
@@ -447,7 +424,6 @@ impl AppState {
             self.last_update = Instant::now();
         }
 
-        // 更新动画
         let size = self.window.inner_size();
         let center = (size.width as f32 / 2.0, size.height as f32 / 2.0);
         let anim_changed = self.anim.update(self.cursor_pos, center);
@@ -455,12 +431,11 @@ impl AppState {
         if anim_changed {
             self.animating = true;
             self.need_redraw = true;
-        } else if !self.anim.is_bouncing && !self.anim.is_hovering && !self.context_menu.visible {
+        } else if !self.anim.is_bouncing && !self.anim.is_hovering && !self.menu.visible {
             self.animating = false;
         }
 
-        // 始终需要重绘以显示菜单
-        if self.context_menu.visible {
+        if self.menu.visible {
             self.need_redraw = true;
         }
 
@@ -477,7 +452,8 @@ impl AppState {
                 offset_y,
                 self.anim.eye_offset_x,
                 self.anim.eye_offset_y,
-                &self.context_menu,
+                EMOJI_RADIUS,
+                &self.menu,
             );
             self.need_redraw = false;
         }
@@ -487,7 +463,6 @@ impl AppState {
 fn main() {
     let event_loop = EventLoop::new().unwrap();
 
-    // 系统托盘（仅用于退出）
     let mut icon_data = Vec::with_capacity(16 * 16 * 4);
     for _ in 0..(16 * 16) {
         icon_data.extend_from_slice(&[0xFF, 0xFF, 0x00, 0x00]);
@@ -499,7 +474,7 @@ fn main() {
     tray_menu.append(&quit_item).unwrap();
 
     let _tray_icon = TrayIconBuilder::new()
-        .with_tooltip("Deskemoji")
+        .with_tooltip("Deskemoji - 右键弹出菜单")
         .with_icon(icon)
         .with_menu(Box::new(tray_menu))
         .build()
@@ -510,15 +485,15 @@ fn main() {
         .map(|monitor| {
             let screen_size = monitor.size();
             PhysicalPosition::new(
-                (screen_size.width - 120 - WINDOW_MARGIN_RIGHT as u32) as i32,
-                (screen_size.height - 120 - WINDOW_MARGIN_BOTTOM as u32) as i32,
+                (screen_size.width - MAIN_WINDOW_SIZE - WINDOW_MARGIN_RIGHT as u32) as i32,
+                (screen_size.height - MAIN_WINDOW_SIZE - WINDOW_MARGIN_BOTTOM as u32) as i32,
             )
         })
         .unwrap_or_else(|| {
             PhysicalPosition::new(DEFAULT_POSITION.0, DEFAULT_POSITION.1)
         });
 
-    let window_size = PhysicalSize::new(120u32, 120u32);
+    let window_size = PhysicalSize::new(MAIN_WINDOW_SIZE, MAIN_WINDOW_SIZE);
 
     let window = Rc::new(
         WindowBuilder::new()
@@ -539,7 +514,6 @@ fn main() {
     let menu_channel = tray_icon::menu::MenuEvent::receiver();
 
     event_loop.run(move |event, elwt| {
-        // 处理托盘菜单
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_item.id() {
                 elwt.exit();
@@ -564,11 +538,6 @@ fn main() {
                 }
                 WindowEvent::CursorLeft { .. } => {
                     state.handle_hover(false);
-                    // 鼠标离开时隐藏菜单
-                    if state.context_menu.visible {
-                        state.context_menu.hide();
-                        state.need_redraw = true;
-                    }
                 }
                 _ => {}
             },
@@ -579,8 +548,7 @@ fn main() {
                     state.window.request_redraw();
                 }
                 
-                // 使用 Wait 而不是 Poll，只在需要时唤醒
-                if state.animating || state.context_menu.visible {
+                if state.animating || state.menu.visible {
                     elwt.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME_DURATION));
                 } else {
                     elwt.set_control_flow(ControlFlow::Wait);
