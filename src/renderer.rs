@@ -1,7 +1,10 @@
-use softbuffer::{Context, Surface};
+﻿use softbuffer::{Context, Surface};
 use winit::window::Window;
+use winit::dpi::PhysicalPosition;
 use std::num::NonZeroU32;
 use std::rc::Rc;
+
+use crate::ContextMenu;
 
 pub struct Renderer {
     context: Context<Rc<Window>>,
@@ -23,6 +26,7 @@ impl Renderer {
         offset_y: f32,
         eye_offset_x: f32,
         eye_offset_y: f32,
+        context_menu: &ContextMenu,
     ) {
         let size = window.inner_size();
         if size.width == 0 || size.height == 0 {
@@ -54,8 +58,9 @@ impl Renderer {
 
                 if dist_sq <= radius * radius {
                     let idx = (y as u32 * size.width + x as u32) as usize;
-                    // 浅黄色带渐变效果
-                    let gradient = 1.0 - (dist_sq.sqrt() / radius) * 0.1;
+                    // 渐变效果
+                    let dist = dist_sq.sqrt();
+                    let gradient = 1.0 - (dist / radius) * 0.15;
                     let r = (255.0 * gradient) as u32;
                     let g = (217.0 * gradient) as u32;
                     let b = (61.0 * gradient) as u32;
@@ -76,6 +81,16 @@ impl Renderer {
             eye_offset_x,
             eye_offset_y,
         );
+
+        // 绘制右键菜单
+        if context_menu.visible {
+            Self::draw_context_menu(
+                &mut buffer,
+                size.width,
+                size.height,
+                context_menu,
+            );
+        }
 
         buffer.present().unwrap();
     }
@@ -99,43 +114,128 @@ impl Renderer {
         let eye_r = (5.0 * s) as i32;
 
         match emoji {
-            '🙂' | '😊' | '🤗' | '😌' => {
-                // 微笑表情：眼睛 + 弯弯的嘴
+            '\u{1F642}' | '\u{1F60A}' => {  // 🙂 😊
                 Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, eye_r, 0xFF000000);
                 Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, eye_r, 0xFF000000);
                 Self::draw_arc(buffer, width, height, cx, cy + (5.0 * s) as i32, (20.0 * s) as i32, 0xFF000000);
             }
-            '😴' | '😪' => {
-                // 闭眼：画横线
-                Self::draw_line(buffer, width, height,
-                    left_eye_x - 5, left_eye_y,
-                    left_eye_x + 5, left_eye_y, 0xFF000000);
-                Self::draw_line(buffer, width, height,
-                    right_eye_x - 5, right_eye_y,
-                    right_eye_x + 5, right_eye_y, 0xFF000000);
+            '\u{1F622}' => {  // 😢
+                Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, eye_r, 0xFF000000);
+                Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, eye_r, 0xFF000000);
+                Self::draw_arc(buffer, width, height, cx, cy + (12.0 * s) as i32, (15.0 * s) as i32, 0xFF000000);
+                // 泪滴
+                Self::draw_circle(buffer, width, height, left_eye_x - 3, left_eye_y + 8, 2, 0xFF4FC3F7);
+            }
+            '\u{1F621}' => {  // 😡
+                Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, eye_r, 0xFF000000);
+                Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, eye_r, 0xFF000000);
+                Self::draw_line(buffer, width, height, cx - 20, cy - 5, cx - 10, cy - 8, 0xFF000000);
+                Self::draw_line(buffer, width, height, cx + 10, cy - 8, cx + 20, cy - 5, 0xFF000000);
                 Self::draw_circle(buffer, width, height, cx, cy + (10.0 * s) as i32, (8.0 * s) as i32, 0xFF000000);
             }
-            '🥵' => {
-                // 热：睁眼 + 张嘴 + 汗滴
+            '\u{1F634}' => {  // 😴
+                Self::draw_line(buffer, width, height, left_eye_x - 5, left_eye_y, left_eye_x + 5, left_eye_y, 0xFF000000);
+                Self::draw_line(buffer, width, height, right_eye_x - 5, right_eye_y, right_eye_x + 5, right_eye_y, 0xFF000000);
+                Self::draw_arc(buffer, width, height, cx, cy + (8.0 * s) as i32, (12.0 * s) as i32, 0xFF000000);
+            }
+            '\u{1F914}' => {  // 🤔
                 Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, eye_r, 0xFF000000);
                 Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, eye_r, 0xFF000000);
-                Self::draw_circle(buffer, width, height, cx, cy + (12.0 * s) as i32, (10.0 * s) as i32, 0xFF000000);
-                Self::draw_circle(buffer, width, height, cx + (28.0 * s) as i32, cy - (8.0 * s) as i32, (4.0 * s) as i32, 0xFF4FC3F7);
+                Self::draw_line(buffer, width, height, cx - 5, cy + 8, cx + 5, cy + 8, 0xFF000000);
             }
-            '💀' => {
-                Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, (7.0 * s) as i32, 0xFF000000);
-                Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, (7.0 * s) as i32, 0xFF000000);
-                Self::draw_triangle(buffer, width, height, cx, cy + (8.0 * s) as i32, (6.0 * s) as i32, 0xFF000000);
-            }
-            '🌙' => {
+            '\u{1F975}' => {  // 🥵
                 Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, eye_r, 0xFF000000);
                 Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, eye_r, 0xFF000000);
-                Self::draw_arc(buffer, width, height, cx, cy + (8.0 * s) as i32, (15.0 * s) as i32, 0xFF000000);
+                Self::draw_circle(buffer, width, height, cx, cy + (10.0 * s) as i32, (8.0 * s) as i32, 0xFF000000);
+                Self::draw_circle(buffer, width, height, cx + 25, cy - 5, 3, 0xFF4FC3F7);
+            }
+            '\u{1F480}' => {  // 💀
+                Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, (6.0 * s) as i32, 0xFF000000);
+                Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, (6.0 * s) as i32, 0xFF000000);
+                Self::draw_triangle(buffer, width, height, cx, cy + (8.0 * s) as i32, (5.0 * s) as i32, 0xFF000000);
+            }
+            '\u{1F319}' => {  // 🌙
+                Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, eye_r, 0xFF000000);
+                Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, eye_r, 0xFF000000);
+                Self::draw_arc(buffer, width, height, cx, cy + (8.0 * s) as i32, (12.0 * s) as i32, 0xFF000000);
             }
             _ => {
                 Self::draw_circle(buffer, width, height, left_eye_x, left_eye_y, eye_r, 0xFF000000);
                 Self::draw_circle(buffer, width, height, right_eye_x, right_eye_y, eye_r, 0xFF000000);
                 Self::draw_arc(buffer, width, height, cx, cy + (5.0 * s) as i32, (20.0 * s) as i32, 0xFF000000);
+            }
+        }
+    }
+
+    fn draw_context_menu(
+        buffer: &mut [u32],
+        width: u32,
+        height: u32,
+        context_menu: &ContextMenu,
+    ) {
+        let menu_x = context_menu.position.x;
+        let menu_y = context_menu.position.y;
+        let menu_width = 150;
+        let item_height = 30;
+        let menu_height = (context_menu.items.len() as i32) * item_height;
+        
+        // 绘制菜单背景
+        Self::draw_rect(buffer, width, height, menu_x, menu_y, menu_width, menu_height, 0xE0FFFFFF);
+        
+        // 绘制边框
+        Self::draw_rect_outline(buffer, width, height, menu_x, menu_y, menu_width, menu_height, 0xFF808080);
+        
+        // 绘制菜单项
+        for (i, (_, text)) in context_menu.items.iter().enumerate() {
+            let item_y = menu_y + (i as i32) * item_height;
+            
+            // 绘制悬停效果
+            if context_menu.hovered == Some(i) {
+                Self::draw_rect(buffer, width, height, menu_x + 2, item_y + 2, menu_width - 4, item_height - 4, 0xFFE0E0FF);
+            }
+            
+            // 绘制分隔符
+            if text == "设置" || text == "退出" {
+                Self::draw_line(buffer, width, height, menu_x + 5, item_y, menu_x + menu_width - 5, item_y, 0xFFC0C0C0);
+            }
+            
+            // 绘制文字（简化版，只绘制占位符）
+            let text_color = if context_menu.hovered == Some(i) { 0xFF0000FF } else { 0xFF000000 };
+            Self::draw_text_placeholder(buffer, width, height, menu_x + 10, item_y + 8, text, text_color);
+        }
+    }
+
+    fn draw_text_placeholder(
+        buffer: &mut [u32],
+        width: u32,
+        height: u32,
+        x: i32,
+        y: i32,
+        text: &str,
+        color: u32,
+    ) {
+        // 简化版：绘制文字指示条
+        let char_width = 8;
+        let char_height = 14;
+        let text_len = text.len().min(15) as i32;
+        
+        for i in 0..text_len {
+            let px = x + i * char_width;
+            // 绘制简单的字符指示
+            for dy in 0..char_height {
+                for dx in 0..(char_width - 2) {
+                    let draw_x = px + dx;
+                    let draw_y = y + dy;
+                    if draw_x >= 0 && draw_x < width as i32 && draw_y >= 0 && draw_y < height as i32 {
+                        // 只绘制部分像素作为指示
+                        if (dx + dy) % 3 == 0 {
+                            let idx = (draw_y as u32 * width + draw_x as u32) as usize;
+                            if idx < buffer.len() {
+                                buffer[idx] = color;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -168,7 +268,6 @@ impl Renderer {
                 if idx < buffer.len() {
                     buffer[idx] = color;
                 }
-                // 加粗弧线
                 if y + 1 < height as i32 {
                     let idx2 = ((y + 1) as u32 * width + x as u32) as usize;
                     if idx2 < buffer.len() {
@@ -218,5 +317,29 @@ impl Renderer {
                 }
             }
         }
+    }
+
+    fn draw_rect(buffer: &mut [u32], width: u32, height: u32, x: i32, y: i32, w: i32, h: i32, color: u32) {
+        for py in y..(y + h) {
+            for px in x..(x + w) {
+                if px >= 0 && px < width as i32 && py >= 0 && py < height as i32 {
+                    let idx = (py as u32 * width + px as u32) as usize;
+                    if idx < buffer.len() {
+                        buffer[idx] = color;
+                    }
+                }
+            }
+        }
+    }
+
+    fn draw_rect_outline(buffer: &mut [u32], width: u32, height: u32, x: i32, y: i32, w: i32, h: i32, color: u32) {
+        // 上边
+        Self::draw_line(buffer, width, height, x, y, x + w, y, color);
+        // 下边
+        Self::draw_line(buffer, width, height, x, y + h, x + w, y + h, color);
+        // 左边
+        Self::draw_line(buffer, width, height, x, y, x, y + h, color);
+        // 右边
+        Self::draw_line(buffer, width, height, x + w, y, x + w, y + h, color);
     }
 }
