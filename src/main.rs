@@ -11,15 +11,10 @@ use winit::{
     window::{WindowBuilder, WindowLevel, Window},
 };
 use winit::platform::windows::WindowBuilderExtWindows;
-use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem},
     TrayIconBuilder, Icon,
 };
-use windows::Win32::UI::WindowsAndMessaging::{
-    SendMessageW, WM_NCLBUTTONDOWN, HTCAPTION,
-};
-use windows::Win32::Foundation::HWND;
 
 use monitor::Monitor;
 use emoji::EmojiState;
@@ -141,7 +136,9 @@ struct AppState {
     anim: AnimState,
     cursor_pos: PhysicalPosition<f64>,
     need_redraw: bool,
-    hwnd: Option<HWND>,
+    is_dragging: bool,
+    drag_start_cursor: PhysicalPosition<f64>,
+    drag_start_window: PhysicalPosition<i32>,
 }
 
 impl AppState {
@@ -149,15 +146,6 @@ impl AppState {
         let renderer = Renderer::new(window.clone());
         let mut monitor = Monitor::new();
         let current_emoji = EmojiState::from_system_info(&monitor.get_info());
-        
-        let hwnd = window.window_handle().ok().and_then(|handle| {
-            match handle.as_raw() {
-                RawWindowHandle::Win32(win32_handle) => {
-                    Some(HWND(isize::from(win32_handle.hwnd) as _))
-                }
-                _ => None,
-            }
-        });
 
         Self {
             window,
@@ -169,26 +157,42 @@ impl AppState {
             anim: AnimState::new(),
             cursor_pos: PhysicalPosition::new(0.0, 0.0),
             need_redraw: true,
-            hwnd,
+            is_dragging: false,
+            drag_start_cursor: PhysicalPosition::new(0.0, 0.0),
+            drag_start_window: PhysicalPosition::new(0, 0),
         }
     }
 
     fn handle_cursor_moved(&mut self, position: PhysicalPosition<f64>) {
         self.cursor_pos = position;
         self.last_activity = Instant::now();
+        
+        if self.is_dragging {
+            let dx = (position.x - self.drag_start_cursor.x) as i32;
+            let dy = (position.y - self.drag_start_cursor.y) as i32;
+            let new_x = self.drag_start_window.x + dx;
+            let new_y = self.drag_start_window.y + dy;
+            self.window.set_outer_position(PhysicalPosition::new(new_x, new_y));
+        }
     }
 
     fn handle_mouse_input(&mut self, button: MouseButton, state: ElementState) {
-        if button == MouseButton::Left && state == ElementState::Pressed {
-            self.last_activity = Instant::now();
-            if let Some(hwnd) = self.hwnd {
-                unsafe {
-                    use windows::Win32::Foundation::WPARAM;
-                    let _ = SendMessageW(hwnd, WM_NCLBUTTONDOWN, WPARAM(HTCAPTION as usize), None);
+        if button == MouseButton::Left {
+            match state {
+                ElementState::Pressed => {
+                    self.last_activity = Instant::now();
+                    self.is_dragging = true;
+                    self.drag_start_cursor = self.cursor_pos;
+                    if let Ok(pos) = self.window.outer_position() {
+                        self.drag_start_window = pos;
+                    }
+                    self.anim.trigger_bounce();
+                    self.need_redraw = true;
+                }
+                ElementState::Released => {
+                    self.is_dragging = false;
                 }
             }
-            self.anim.trigger_bounce();
-            self.need_redraw = true;
         }
     }
 
@@ -223,7 +227,7 @@ impl AppState {
         let center = (size.width as f32 / 2.0, size.height as f32 / 2.0);
         self.anim.update(self.cursor_pos, center);
         
-        if self.anim.is_bouncing || self.anim.is_hovering {
+        if self.anim.is_bouncing || self.anim.is_hovering || self.is_dragging {
             self.need_redraw = true;
         }
     }
