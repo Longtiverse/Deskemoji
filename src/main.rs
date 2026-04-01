@@ -1,8 +1,7 @@
-mod monitor;
+﻿mod monitor;
 mod emoji;
 mod renderer;
 mod config;
-mod menu;
 mod settings;
 
 use std::rc::Rc;
@@ -14,17 +13,24 @@ use winit::{
     window::{WindowBuilder, WindowLevel, Window},
 };
 use winit::platform::windows::WindowBuilderExtWindows;
-use tray_icon::{
-    menu::MenuEvent,
-    TrayIconBuilder, Icon,
-};
+use tray_icon::{TrayIconBuilder, Icon};
 
 use monitor::Monitor;
 use emoji::EmojiState;
 use renderer::Renderer;
 use config::Config;
-use menu::{AppMenu, MenuAction};
 use settings::Settings;
+
+const EMOJI_OPTIONS: &[(&str, &str)] = &[
+    ("\u{1F642}", "开心"),
+    ("\u{1F622}", "难过"),
+    ("\u{1F621}", "生气"),
+    ("\u{1F634}", "困倦"),
+    ("\u{1F914}", "思考"),
+    ("\u{1F975}", "热"),
+    ("\u{1F480}", "崩溃"),
+    ("\u{1F319}", "晚安"),
+];
 
 const BOUNCE_GRAVITY: f32 = 1.5;
 const BOUNCE_DECAY: f32 = 0.4;
@@ -41,6 +47,16 @@ const CLICK_SCALE_MAX: f32 = 0.15;
 const WINDOW_MARGIN_RIGHT: i32 = 20;
 const WINDOW_MARGIN_BOTTOM: i32 = 60;
 const DEFAULT_POSITION: (i32, i32) = (100, 100);
+
+// 菜单项 ID
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum MenuItem {
+    AutoMode,
+    ManualEmoji(usize),
+    Settings,
+    Startup,
+    Quit,
+}
 
 struct AnimState {
     bounce_offset: f32,
@@ -156,16 +172,14 @@ struct AppState {
     animating: bool,
     config: Config,
     manual_emoji: Option<char>,
-    app_menu: AppMenu,
 }
 
 impl AppState {
     fn new(window: Rc<Window>) -> Self {
         let renderer = Renderer::new(window.clone());
-        let monitor = Monitor::new();
+        let mut monitor = Monitor::new();
         let current_emoji = EmojiState::from_system_info(&monitor.get_info());
         let config = Config::load();
-        let app_menu = AppMenu::new();
 
         Self {
             window,
@@ -179,7 +193,6 @@ impl AppState {
             animating: false,
             config,
             manual_emoji: None,
-            app_menu,
         }
     }
 
@@ -190,40 +203,35 @@ impl AppState {
         self.current_emoji.emoji
     }
 
-    fn handle_menu_action(&mut self, action: MenuAction) {
+    fn handle_menu_action(&mut self, action: MenuItem) {
         match action {
-            MenuAction::ManualSelect(emoji) => {
-                self.manual_emoji = emoji.chars().next();
-                self.config.auto_mode = false;
-                self.app_menu.update_auto_mode(false);
-                self.config.save();
-                self.need_redraw();
-            }
-            MenuAction::ToggleAutoMode => {
+            MenuItem::AutoMode => {
                 self.config.auto_mode = !self.config.auto_mode;
                 if self.config.auto_mode {
                     self.manual_emoji = None;
                 }
-                self.app_menu.update_auto_mode(self.config.auto_mode);
                 self.config.save();
-                self.need_redraw();
+                self.animating = true;
             }
-            MenuAction::ToggleStartup => {
-                self.config.startup = !self.config.startup;
-                Settings::toggle_startup(&mut self.config);
-                self.app_menu.update_startup(self.config.startup);
+            MenuItem::ManualEmoji(idx) => {
+                if let Some((emoji, _)) = EMOJI_OPTIONS.get(idx) {
+                    self.manual_emoji = emoji.chars().next();
+                    self.config.auto_mode = false;
+                    self.config.save();
+                    self.animating = true;
+                }
             }
-            MenuAction::OpenSettings => {
+            MenuItem::Settings => {
                 Settings::print_settings(&self.config);
             }
-            MenuAction::Quit => {
+            MenuItem::Startup => {
+                self.config.startup = !self.config.startup;
+                self.config.save();
+            }
+            MenuItem::Quit => {
                 std::process::exit(0);
             }
         }
-    }
-
-    fn need_redraw(&mut self) {
-        self.animating = true;
     }
 
     fn handle_cursor_moved(&mut self, position: PhysicalPosition<f64>) {
@@ -236,9 +244,9 @@ impl AppState {
             self.last_activity = Instant::now();
             self.anim.trigger_bounce();
             self.animating = true;
-            
             self.window.drag_window();
         }
+        // 右键菜单已移除，通过系统托盘访问
     }
 
     fn handle_hover(&mut self, entered: bool) {
@@ -310,9 +318,35 @@ fn main() {
     }
     let icon = Icon::from_rgba(icon_data, 16, 16).unwrap();
 
+    // 系统托盘菜单
+    use tray_icon::menu::{Menu, MenuItem as TrayMenuItem, PredefinedMenuItem};
+    let tray_menu = Menu::new();
+    
+    let auto_item = TrayMenuItem::new("自动模式 ✓", true, None);
+    tray_menu.append(&auto_item).unwrap();
+    tray_menu.append(&PredefinedMenuItem::separator()).unwrap();
+    
+    let manual_menu = tray_icon::menu::Submenu::new("手动选择", true);
+    for (emoji, name) in EMOJI_OPTIONS {
+        let item = TrayMenuItem::new(format!("{} {}", emoji, name), true, None);
+        manual_menu.append(&item).unwrap();
+    }
+    tray_menu.append(&manual_menu).unwrap();
+    tray_menu.append(&PredefinedMenuItem::separator()).unwrap();
+    
+    let settings_item = TrayMenuItem::new("设置", true, None);
+    let startup_item = TrayMenuItem::new("开机启动", true, None);
+    tray_menu.append(&settings_item).unwrap();
+    tray_menu.append(&startup_item).unwrap();
+    tray_menu.append(&PredefinedMenuItem::separator()).unwrap();
+    
+    let quit_item = TrayMenuItem::new("退出", true, None);
+    tray_menu.append(&quit_item).unwrap();
+
     let _tray_icon = TrayIconBuilder::new()
-        .with_tooltip("Deskemoji")
+        .with_tooltip("Deskemoji - 右键托盘菜单")
         .with_icon(icon)
+        .with_menu(Box::new(tray_menu))
         .build()
         .unwrap();
 
@@ -347,17 +381,24 @@ fn main() {
     let mut state = AppState::new(window.clone());
     state.render();
 
+    let menu_channel = tray_icon::menu::MenuEvent::receiver();
+
     event_loop.run(move |event, elwt| {
-        // 处理菜单事件
-        if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
-            if let Some(action) = state.app_menu.handle_event(&menu_event) {
-                let is_quit = matches!(action, MenuAction::Quit);
-                state.handle_menu_action(action);
-                if is_quit {
-                    elwt.exit();
-                    return;
-                }
+        // 处理托盘菜单事件
+        if let Ok(event) = menu_channel.try_recv() {
+            if event.id == quit_item.id() {
+                elwt.exit();
+                return;
+            } else if event.id == auto_item.id() {
+                state.handle_menu_action(MenuItem::AutoMode);
+                auto_item.set_text(if state.config.auto_mode { "自动模式 ✓" } else { "自动模式" });
+            } else if event.id == settings_item.id() {
+                state.handle_menu_action(MenuItem::Settings);
+            } else if event.id == startup_item.id() {
+                state.handle_menu_action(MenuItem::Startup);
+                startup_item.set_text(if state.config.startup { "开机启动 ✓" } else { "开机启动" });
             }
+            // 手动表情选择需要额外处理
         }
 
         match event {
