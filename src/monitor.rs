@@ -1,5 +1,6 @@
-use sysinfo::System;
+﻿use sysinfo::System;
 use chrono::{Local, Timelike};
+use crate::config::Config;
 
 #[derive(Debug, Clone)]
 pub struct SystemInfo {
@@ -45,6 +46,42 @@ impl Monitor {
             cpu_usage,
             memory_usage,
             is_idle: self.idle_seconds >= 300,
+        }
+    }
+
+    pub fn get_emoji_for_config(&self, config: &Config) -> crate::emoji::EmojiState {
+        let info = self.get_info();
+        
+        // 使用配置的阈值
+        if info.cpu_usage > config.cpu_threshold {
+            return crate::emoji::EmojiState {
+                emoji: '🥵',
+                scenario: "high_cpu",
+            };
+        }
+        
+        if info.memory_usage > config.memory_threshold {
+            return crate::emoji::EmojiState {
+                emoji: '💀',
+                scenario: "high_memory",
+            };
+        }
+        
+        if info.is_idle {
+            return crate::emoji::EmojiState {
+                emoji: '😴',
+                scenario: "idle",
+            };
+        }
+        
+        // 根据时间
+        match info.hour {
+            6..=9 => crate::emoji::EmojiState { emoji: '🙂', scenario: "morning" },
+            10..=11 => crate::emoji::EmojiState { emoji: '😊', scenario: "late_morning" },
+            12..=13 => crate::emoji::EmojiState { emoji: '🤗', scenario: "noon" },
+            14..=17 => crate::emoji::EmojiState { emoji: '😌', scenario: "afternoon" },
+            18..=22 => crate::emoji::EmojiState { emoji: '🌙', scenario: "evening" },
+            _ => crate::emoji::EmojiState { emoji: '😪', scenario: "night" },
         }
     }
 }

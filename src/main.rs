@@ -1,6 +1,9 @@
-﻿mod monitor;
+mod monitor;
 mod emoji;
 mod renderer;
+mod config;
+mod menu;
+mod settings;
 
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -12,13 +15,16 @@ use winit::{
 };
 use winit::platform::windows::WindowBuilderExtWindows;
 use tray_icon::{
-    menu::{Menu, MenuEvent, MenuItem},
+    menu::MenuEvent,
     TrayIconBuilder, Icon,
 };
 
 use monitor::Monitor;
 use emoji::EmojiState;
 use renderer::Renderer;
+use config::Config;
+use menu::{AppMenu, MenuAction};
+use settings::Settings;
 
 const BOUNCE_GRAVITY: f32 = 1.5;
 const BOUNCE_DECAY: f32 = 0.4;
@@ -32,7 +38,6 @@ const EYE_MAX_OFFSET: f32 = 4.0;
 const EYE_DECAY: f32 = 0.9;
 const CLICK_DURATION_MS: u128 = 150;
 const CLICK_SCALE_MAX: f32 = 0.15;
-const WINDOW_SIZE: u32 = 120;
 const WINDOW_MARGIN_RIGHT: i32 = 20;
 const WINDOW_MARGIN_BOTTOM: i32 = 60;
 const DEFAULT_POSITION: (i32, i32) = (100, 100);
@@ -149,13 +154,18 @@ struct AppState {
     anim: AnimState,
     cursor_pos: PhysicalPosition<f64>,
     animating: bool,
+    config: Config,
+    manual_emoji: Option<char>,
+    app_menu: AppMenu,
 }
 
 impl AppState {
     fn new(window: Rc<Window>) -> Self {
         let renderer = Renderer::new(window.clone());
-        let mut monitor = Monitor::new();
+        let monitor = Monitor::new();
         let current_emoji = EmojiState::from_system_info(&monitor.get_info());
+        let config = Config::load();
+        let app_menu = AppMenu::new();
 
         Self {
             window,
@@ -167,7 +177,53 @@ impl AppState {
             anim: AnimState::new(),
             cursor_pos: PhysicalPosition::new(0.0, 0.0),
             animating: false,
+            config,
+            manual_emoji: None,
+            app_menu,
         }
+    }
+
+    fn get_display_emoji(&self) -> char {
+        if let Some(emoji) = self.manual_emoji {
+            return emoji;
+        }
+        self.current_emoji.emoji
+    }
+
+    fn handle_menu_action(&mut self, action: MenuAction) {
+        match action {
+            MenuAction::ManualSelect(emoji) => {
+                self.manual_emoji = emoji.chars().next();
+                self.config.auto_mode = false;
+                self.app_menu.update_auto_mode(false);
+                self.config.save();
+                self.need_redraw();
+            }
+            MenuAction::ToggleAutoMode => {
+                self.config.auto_mode = !self.config.auto_mode;
+                if self.config.auto_mode {
+                    self.manual_emoji = None;
+                }
+                self.app_menu.update_auto_mode(self.config.auto_mode);
+                self.config.save();
+                self.need_redraw();
+            }
+            MenuAction::ToggleStartup => {
+                self.config.startup = !self.config.startup;
+                Settings::toggle_startup(&mut self.config);
+                self.app_menu.update_startup(self.config.startup);
+            }
+            MenuAction::OpenSettings => {
+                Settings::print_settings(&self.config);
+            }
+            MenuAction::Quit => {
+                std::process::exit(0);
+            }
+        }
+    }
+
+    fn need_redraw(&mut self) {
+        self.animating = true;
     }
 
     fn handle_cursor_moved(&mut self, position: PhysicalPosition<f64>) {
@@ -181,7 +237,6 @@ impl AppState {
             self.anim.trigger_bounce();
             self.animating = true;
             
-            // 使用 winit 的 drag_window 方法
             self.window.drag_window();
         }
     }
@@ -200,18 +255,20 @@ impl AppState {
     fn update(&mut self) -> bool {
         let mut should_render = false;
         
-        if self.last_update.elapsed() >= Duration::from_secs(2) {
+        if self.last_update.elapsed() >= Duration::from_secs(self.config.update_interval_secs) {
             self.monitor.update();
             
             let idle_secs = self.last_activity.elapsed().as_secs();
             self.monitor.set_idle(idle_secs);
             
-            let info = self.monitor.get_info();
-            let new_emoji = EmojiState::from_system_info(&info);
+            if self.config.auto_mode {
+                let info = self.monitor.get_info();
+                let new_emoji = EmojiState::from_system_info(&info);
 
-            if new_emoji.scenario != self.current_emoji.scenario {
-                self.current_emoji = new_emoji;
-                should_render = true;
+                if new_emoji.scenario != self.current_emoji.scenario {
+                    self.current_emoji = new_emoji;
+                    should_render = true;
+                }
             }
 
             self.last_update = Instant::now();
@@ -235,7 +292,7 @@ impl AppState {
         let offset_y = self.anim.get_total_offset_y();
         self.renderer.render(
             &self.window,
-            self.current_emoji.emoji,
+            self.get_display_emoji(),
             self.anim.click_scale,
             offset_y,
             self.anim.eye_offset_x,
@@ -247,10 +304,6 @@ impl AppState {
 fn main() {
     let event_loop = EventLoop::new().unwrap();
 
-    let tray_menu = Menu::new();
-    let quit_item = MenuItem::new("退出", true, None);
-    let _ = tray_menu.append(&quit_item);
-
     let mut icon_data = Vec::with_capacity(16 * 16 * 4);
     for _ in 0..(16 * 16) {
         icon_data.extend_from_slice(&[0xFF, 0xFF, 0x00, 0x00]);
@@ -258,28 +311,25 @@ fn main() {
     let icon = Icon::from_rgba(icon_data, 16, 16).unwrap();
 
     let _tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(tray_menu))
         .with_tooltip("Deskemoji")
         .with_icon(icon)
         .build()
         .unwrap();
-
-    let menu_channel = MenuEvent::receiver();
 
     let position = event_loop
         .primary_monitor()
         .map(|monitor| {
             let screen_size = monitor.size();
             PhysicalPosition::new(
-                (screen_size.width - WINDOW_SIZE - WINDOW_MARGIN_RIGHT as u32) as i32,
-                (screen_size.height - WINDOW_SIZE - WINDOW_MARGIN_BOTTOM as u32) as i32,
+                (screen_size.width - 120 - WINDOW_MARGIN_RIGHT as u32) as i32,
+                (screen_size.height - 120 - WINDOW_MARGIN_BOTTOM as u32) as i32,
             )
         })
         .unwrap_or_else(|| {
             PhysicalPosition::new(DEFAULT_POSITION.0, DEFAULT_POSITION.1)
         });
 
-    let window_size = PhysicalSize::new(WINDOW_SIZE, WINDOW_SIZE);
+    let window_size = PhysicalSize::new(120u32, 120u32);
 
     let window = Rc::new(
         WindowBuilder::new()
@@ -298,9 +348,15 @@ fn main() {
     state.render();
 
     event_loop.run(move |event, elwt| {
-        if let Ok(event) = menu_channel.try_recv() {
-            if event.id == quit_item.id() {
-                elwt.exit();
+        // 处理菜单事件
+        if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
+            if let Some(action) = state.app_menu.handle_event(&menu_event) {
+                let is_quit = matches!(action, MenuAction::Quit);
+                state.handle_menu_action(action);
+                if is_quit {
+                    elwt.exit();
+                    return;
+                }
             }
         }
 
