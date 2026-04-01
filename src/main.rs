@@ -26,14 +26,12 @@ const BOUNCE_INITIAL_VELOCITY: f32 = -10.0;
 const BOUNCE_MIN_VELOCITY: f32 = 1.0;
 const BREATH_SPEED: f32 = 0.08;
 const BREATH_AMPLITUDE: f32 = 2.5;
-const BREATH_TIMER_MAX: f32 = 1000.0;
 const EYE_TRACK_DISTANCE: f32 = 200.0;
 const EYE_TRACK_FACTOR: f32 = 50.0;
 const EYE_MAX_OFFSET: f32 = 4.0;
 const EYE_DECAY: f32 = 0.9;
 const CLICK_DURATION_MS: u128 = 150;
 const CLICK_SCALE_MAX: f32 = 0.15;
-const UPDATE_INTERVAL_SECS: u64 = 2;
 const WINDOW_SIZE: u32 = 120;
 const WINDOW_MARGIN_RIGHT: i32 = 20;
 const WINDOW_MARGIN_BOTTOM: i32 = 60;
@@ -72,7 +70,9 @@ impl AnimState {
         self.click_timer = Instant::now();
     }
 
-    fn update(&mut self, cursor_pos: PhysicalPosition<f64>, window_center: (f32, f32)) {
+    fn update(&mut self, cursor_pos: PhysicalPosition<f64>, window_center: (f32, f32)) -> bool {
+        let mut changed = false;
+
         if self.is_bouncing {
             self.bounce_velocity += BOUNCE_GRAVITY;
             self.bounce_offset += self.bounce_velocity;
@@ -86,18 +86,20 @@ impl AnimState {
                     self.bounce_velocity = 0.0;
                 }
             }
+            changed = true;
         }
 
-        if self.is_hovering && !self.is_bouncing {
+        if self.is_hovering {
             self.breath_timer += BREATH_SPEED;
-            if self.breath_timer > BREATH_TIMER_MAX {
-                self.breath_timer = 0.0;
-            }
+            changed = true;
         }
 
         let dx = cursor_pos.x as f32 - window_center.0;
         let dy = cursor_pos.y as f32 - window_center.1;
         let dist = (dx * dx + dy * dy).sqrt();
+        
+        let old_eye_x = self.eye_offset_x;
+        let old_eye_y = self.eye_offset_y;
         
         if dist < EYE_TRACK_DISTANCE && dist > 0.0 {
             let factor = (dist / EYE_TRACK_FACTOR).min(1.0);
@@ -107,13 +109,24 @@ impl AnimState {
             self.eye_offset_x *= EYE_DECAY;
             self.eye_offset_y *= EYE_DECAY;
         }
+        
+        if (self.eye_offset_x - old_eye_x).abs() > 0.01 || (self.eye_offset_y - old_eye_y).abs() > 0.01 {
+            changed = true;
+        }
 
+        let old_scale = self.click_scale;
         if self.click_timer.elapsed() < Duration::from_millis(CLICK_DURATION_MS as u64) {
             let t = self.click_timer.elapsed().as_millis() as f32 / CLICK_DURATION_MS as f32;
             self.click_scale = 1.0 + CLICK_SCALE_MAX * (1.0 - (t * std::f32::consts::PI).cos()) / 2.0;
         } else {
             self.click_scale = 1.0;
         }
+        
+        if (self.click_scale - old_scale).abs() > 0.001 {
+            changed = true;
+        }
+
+        changed
     }
 
     fn get_total_offset_y(&self) -> f32 {
@@ -139,6 +152,7 @@ struct AppState {
     is_dragging: bool,
     drag_start_cursor: PhysicalPosition<f64>,
     drag_start_window: PhysicalPosition<i32>,
+    animating: bool,
 }
 
 impl AppState {
@@ -160,6 +174,7 @@ impl AppState {
             is_dragging: false,
             drag_start_cursor: PhysicalPosition::new(0.0, 0.0),
             drag_start_window: PhysicalPosition::new(0, 0),
+            animating: false,
         }
     }
 
@@ -172,7 +187,11 @@ impl AppState {
             let dy = (position.y - self.drag_start_cursor.y) as i32;
             let new_x = self.drag_start_window.x + dx;
             let new_y = self.drag_start_window.y + dy;
+            // 直接移动窗口，不触发重绘
             self.window.set_outer_position(PhysicalPosition::new(new_x, new_y));
+        } else {
+            // 只有非拖动状态下才更新眼神跟随
+            self.need_redraw = true;
         }
     }
 
@@ -187,6 +206,7 @@ impl AppState {
                         self.drag_start_window = pos;
                     }
                     self.anim.trigger_bounce();
+                    self.animating = true;
                     self.need_redraw = true;
                 }
                 ElementState::Released => {
@@ -201,12 +221,17 @@ impl AppState {
         if entered {
             self.anim.breath_timer = 0.0;
             self.last_activity = Instant::now();
+            self.animating = true;
+        } else {
+            self.animating = false;
         }
         self.need_redraw = true;
     }
 
-    fn update(&mut self) {
-        if self.last_update.elapsed() >= Duration::from_secs(UPDATE_INTERVAL_SECS) {
+    fn update(&mut self) -> bool {
+        let mut should_render = self.need_redraw;
+        
+        if self.last_update.elapsed() >= Duration::from_secs(2) {
             self.monitor.update();
             
             let idle_secs = self.last_activity.elapsed().as_secs();
@@ -217,7 +242,7 @@ impl AppState {
 
             if new_emoji.scenario != self.current_emoji.scenario {
                 self.current_emoji = new_emoji;
-                self.need_redraw = true;
+                should_render = true;
             }
 
             self.last_update = Instant::now();
@@ -225,26 +250,29 @@ impl AppState {
 
         let size = self.window.inner_size();
         let center = (size.width as f32 / 2.0, size.height as f32 / 2.0);
-        self.anim.update(self.cursor_pos, center);
+        let anim_changed = self.anim.update(self.cursor_pos, center);
         
-        if self.anim.is_bouncing || self.anim.is_hovering || self.is_dragging {
-            self.need_redraw = true;
+        if anim_changed {
+            self.animating = true;
+            should_render = true;
+        } else if !self.anim.is_bouncing && !self.anim.is_hovering {
+            self.animating = false;
         }
+
+        self.need_redraw = false;
+        should_render
     }
 
     fn render(&mut self) {
-        if self.need_redraw {
-            let offset_y = self.anim.get_total_offset_y();
-            self.renderer.render(
-                &self.window,
-                self.current_emoji.emoji,
-                self.anim.click_scale,
-                offset_y,
-                self.anim.eye_offset_x,
-                self.anim.eye_offset_y,
-            );
-            self.need_redraw = false;
-        }
+        let offset_y = self.anim.get_total_offset_y();
+        self.renderer.render(
+            &self.window,
+            self.current_emoji.emoji,
+            self.anim.click_scale,
+            offset_y,
+            self.anim.eye_offset_x,
+            self.anim.eye_offset_y,
+        );
     }
 }
 
@@ -259,28 +287,20 @@ fn main() {
 
     let tray_menu = Menu::new();
     let quit_item = MenuItem::new("退出", true, None);
-    if let Err(e) = tray_menu.append(&quit_item) {
-        eprintln!("Failed to add quit menu item: {:?}", e);
-    }
+    let _ = tray_menu.append(&quit_item);
 
     let mut icon_data = Vec::with_capacity(16 * 16 * 4);
     for _ in 0..(16 * 16) {
         icon_data.extend_from_slice(&[0xFF, 0xFF, 0x00, 0x00]);
     }
-    let icon = Icon::from_rgba(icon_data, 16, 16).unwrap_or_else(|e| {
-        eprintln!("Failed to create icon: {:?}", e);
-        std::process::exit(1);
-    });
+    let icon = Icon::from_rgba(icon_data, 16, 16).unwrap();
 
     let _tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
         .with_tooltip("Deskemoji")
         .with_icon(icon)
         .build()
-        .unwrap_or_else(|e| {
-            eprintln!("Failed to create tray icon: {:?}", e);
-            std::process::exit(1);
-        });
+        .unwrap();
 
     let menu_channel = MenuEvent::receiver();
 
@@ -294,7 +314,6 @@ fn main() {
             )
         })
         .unwrap_or_else(|| {
-            eprintln!("Warning: Could not detect primary monitor, using default position");
             PhysicalPosition::new(DEFAULT_POSITION.0, DEFAULT_POSITION.1)
         });
 
@@ -310,17 +329,16 @@ fn main() {
             .with_window_level(WindowLevel::AlwaysOnTop)
             .with_skip_taskbar(true)
             .build(&event_loop)
-            .unwrap_or_else(|e| {
-                eprintln!("Failed to create window: {:?}", e);
-                std::process::exit(1);
-            }),
+            .unwrap(),
     );
 
     let mut state = AppState::new(window.clone());
 
-    event_loop.run(move |event, elwt| {
-        elwt.set_control_flow(ControlFlow::Poll);
+    // 初始渲染
+    state.render();
 
+    event_loop.run(move |event, elwt| {
+        // 检查退出菜单
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_item.id() {
                 elwt.exit();
@@ -335,26 +353,40 @@ fn main() {
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     state.handle_cursor_moved(position);
+                    // 拖动时不设置 Poll，让窗口系统自己处理
+                    if !state.is_dragging {
+                        elwt.set_control_flow(ControlFlow::Poll);
+                    }
                 }
                 WindowEvent::MouseInput { state: mouse_state, button, .. } => {
                     state.handle_mouse_input(button, mouse_state);
+                    elwt.set_control_flow(ControlFlow::Poll);
                 }
                 WindowEvent::CursorEntered { .. } => {
                     state.handle_hover(true);
+                    elwt.set_control_flow(ControlFlow::Poll);
                 }
                 WindowEvent::CursorLeft { .. } => {
                     state.handle_hover(false);
+                    elwt.set_control_flow(ControlFlow::Wait);
                 }
                 _ => {}
             },
             Event::AboutToWait => {
-                state.update();
-                state.window.request_redraw();
+                let should_render = state.update();
+                
+                if should_render {
+                    state.window.request_redraw();
+                }
+                
+                // 只在动画或交互时使用 Poll
+                if state.animating || state.is_dragging {
+                    elwt.set_control_flow(ControlFlow::Poll);
+                } else {
+                    elwt.set_control_flow(ControlFlow::Wait);
+                }
             }
             _ => {}
         }
-    }).unwrap_or_else(|e| {
-        eprintln!("Event loop error: {:?}", e);
-        std::process::exit(1);
     });
 }
