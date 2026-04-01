@@ -148,10 +148,6 @@ struct AppState {
     last_activity: Instant,
     anim: AnimState,
     cursor_pos: PhysicalPosition<f64>,
-    need_redraw: bool,
-    is_dragging: bool,
-    drag_start_cursor: PhysicalPosition<f64>,
-    drag_start_window: PhysicalPosition<i32>,
     animating: bool,
 }
 
@@ -170,10 +166,6 @@ impl AppState {
             last_activity: Instant::now(),
             anim: AnimState::new(),
             cursor_pos: PhysicalPosition::new(0.0, 0.0),
-            need_redraw: true,
-            is_dragging: false,
-            drag_start_cursor: PhysicalPosition::new(0.0, 0.0),
-            drag_start_window: PhysicalPosition::new(0, 0),
             animating: false,
         }
     }
@@ -181,38 +173,16 @@ impl AppState {
     fn handle_cursor_moved(&mut self, position: PhysicalPosition<f64>) {
         self.cursor_pos = position;
         self.last_activity = Instant::now();
-        
-        if self.is_dragging {
-            let dx = (position.x - self.drag_start_cursor.x) as i32;
-            let dy = (position.y - self.drag_start_cursor.y) as i32;
-            let new_x = self.drag_start_window.x + dx;
-            let new_y = self.drag_start_window.y + dy;
-            // 直接移动窗口，不触发重绘
-            self.window.set_outer_position(PhysicalPosition::new(new_x, new_y));
-        } else {
-            // 只有非拖动状态下才更新眼神跟随
-            self.need_redraw = true;
-        }
     }
 
     fn handle_mouse_input(&mut self, button: MouseButton, state: ElementState) {
-        if button == MouseButton::Left {
-            match state {
-                ElementState::Pressed => {
-                    self.last_activity = Instant::now();
-                    self.is_dragging = true;
-                    self.drag_start_cursor = self.cursor_pos;
-                    if let Ok(pos) = self.window.outer_position() {
-                        self.drag_start_window = pos;
-                    }
-                    self.anim.trigger_bounce();
-                    self.animating = true;
-                    self.need_redraw = true;
-                }
-                ElementState::Released => {
-                    self.is_dragging = false;
-                }
-            }
+        if button == MouseButton::Left && state == ElementState::Pressed {
+            self.last_activity = Instant::now();
+            self.anim.trigger_bounce();
+            self.animating = true;
+            
+            // 使用 winit 的 drag_window 方法
+            self.window.drag_window();
         }
     }
 
@@ -225,11 +195,10 @@ impl AppState {
         } else {
             self.animating = false;
         }
-        self.need_redraw = true;
     }
 
     fn update(&mut self) -> bool {
-        let mut should_render = self.need_redraw;
+        let mut should_render = false;
         
         if self.last_update.elapsed() >= Duration::from_secs(2) {
             self.monitor.update();
@@ -259,7 +228,6 @@ impl AppState {
             self.animating = false;
         }
 
-        self.need_redraw = false;
         should_render
     }
 
@@ -277,13 +245,7 @@ impl AppState {
 }
 
 fn main() {
-    let event_loop = match EventLoop::new() {
-        Ok(el) => el,
-        Err(e) => {
-            eprintln!("Failed to create event loop: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let event_loop = EventLoop::new().unwrap();
 
     let tray_menu = Menu::new();
     let quit_item = MenuItem::new("退出", true, None);
@@ -333,12 +295,9 @@ fn main() {
     );
 
     let mut state = AppState::new(window.clone());
-
-    // 初始渲染
     state.render();
 
     event_loop.run(move |event, elwt| {
-        // 检查退出菜单
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_item.id() {
                 elwt.exit();
@@ -353,22 +312,15 @@ fn main() {
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     state.handle_cursor_moved(position);
-                    // 拖动时不设置 Poll，让窗口系统自己处理
-                    if !state.is_dragging {
-                        elwt.set_control_flow(ControlFlow::Poll);
-                    }
                 }
                 WindowEvent::MouseInput { state: mouse_state, button, .. } => {
                     state.handle_mouse_input(button, mouse_state);
-                    elwt.set_control_flow(ControlFlow::Poll);
                 }
                 WindowEvent::CursorEntered { .. } => {
                     state.handle_hover(true);
-                    elwt.set_control_flow(ControlFlow::Poll);
                 }
                 WindowEvent::CursorLeft { .. } => {
                     state.handle_hover(false);
-                    elwt.set_control_flow(ControlFlow::Wait);
                 }
                 _ => {}
             },
@@ -379,8 +331,7 @@ fn main() {
                     state.window.request_redraw();
                 }
                 
-                // 只在动画或交互时使用 Poll
-                if state.animating || state.is_dragging {
+                if state.animating {
                     elwt.set_control_flow(ControlFlow::Poll);
                 } else {
                     elwt.set_control_flow(ControlFlow::Wait);
