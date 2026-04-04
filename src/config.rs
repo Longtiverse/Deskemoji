@@ -53,6 +53,9 @@ impl Config {
 
     fn config_path() -> PathBuf {
         let exe_path = std::env::current_exe().unwrap_or_default();
-        exe_path.parent().unwrap_or(&PathBuf::from(".")).join("config.json")
+        exe_path
+            .parent()
+            .unwrap_or(&PathBuf::from("."))
+            .join("config.json")
     }
 }

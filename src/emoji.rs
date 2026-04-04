@@ -25,12 +25,30 @@ impl EmojiState {
             }
         } else {
             match info.hour {
-                6..=9 => Self { emoji: '🙂', scenario: "morning" },
-                10..=11 => Self { emoji: '😊', scenario: "late_morning" },
-                12..=13 => Self { emoji: '🤗', scenario: "noon" },
-                14..=17 => Self { emoji: '😌', scenario: "afternoon" },
-                18..=22 => Self { emoji: '🌙', scenario: "evening" },
-                _ => Self { emoji: '😪', scenario: "night" },
+                6..=9 => Self {
+                    emoji: '🙂',
+                    scenario: "morning",
+                },
+                10..=11 => Self {
+                    emoji: '😊',
+                    scenario: "late_morning",
+                },
+                12..=13 => Self {
+                    emoji: '🤗',
+                    scenario: "noon",
+                },
+                14..=17 => Self {
+                    emoji: '😌',
+                    scenario: "afternoon",
+                },
+                18..=22 => Self {
+                    emoji: '🌙',
+                    scenario: "evening",
+                },
+                _ => Self {
+                    emoji: '😪',
+                    scenario: "night",
+                },
             }
         }
     }

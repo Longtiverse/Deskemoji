@@ -1,7 +1,7 @@
-﻿use softbuffer::{Context, Surface};
-use winit::window::Window;
+use softbuffer::{Context, Surface};
 use std::num::NonZeroU32;
 use std::rc::Rc;
+use winit::window::Window;
 
 pub struct Renderer {
     context: Context<Rc<Window>>,
@@ -25,12 +25,16 @@ impl Renderer {
         eye_y: f32,
     ) {
         let size = window.inner_size();
-        if size.width == 0 || size.height == 0 { return; }
+        if size.width == 0 || size.height == 0 {
+            return;
+        }
 
-        self.surface.resize(
-            NonZeroU32::new(size.width).unwrap(),
-            NonZeroU32::new(size.height).unwrap(),
-        ).unwrap();
+        self.surface
+            .resize(
+                NonZeroU32::new(size.width).unwrap(),
+                NonZeroU32::new(size.height).unwrap(),
+            )
+            .unwrap();
 
         let mut buf = self.surface.buffer_mut().unwrap();
         buf.fill(0x00000000);
@@ -48,9 +52,9 @@ impl Renderer {
                     let idx = (y as u32 * size.width + x as u32) as usize;
                     let dist = dist_sq.sqrt();
                     let g = 1.0 - dist / radius * 0.12;
-                    buf[idx] = 0xFF000000 
-                        | ((255.0 * g) as u32) << 16 
-                        | ((217.0 * g) as u32) << 8 
+                    buf[idx] = 0xFF000000
+                        | ((255.0 * g) as u32) << 16
+                        | ((217.0 * g) as u32) << 8
                         | ((61.0 * g) as u32);
                 }
             }
@@ -59,14 +63,35 @@ impl Renderer {
         // 绘制眼睛 - 跟随鼠标
         let eye_cx = cx + eye_x;
         let eye_cy = cy - 12.0 + eye_y;
-        draw_circle(&mut buf, size.width, size.height, 
-            (eye_cx - 15.0) as i32, eye_cy as i32, 6, 0xFF000000);
-        draw_circle(&mut buf, size.width, size.height, 
-            (eye_cx + 15.0) as i32, eye_cy as i32, 6, 0xFF000000);
+        draw_circle(
+            &mut buf,
+            size.width,
+            size.height,
+            (eye_cx - 15.0) as i32,
+            eye_cy as i32,
+            6,
+            0xFF000000,
+        );
+        draw_circle(
+            &mut buf,
+            size.width,
+            size.height,
+            (eye_cx + 15.0) as i32,
+            eye_cy as i32,
+            6,
+            0xFF000000,
+        );
 
         // 绘制嘴巴
-        draw_arc(&mut buf, size.width, size.height,
-            cx as i32, (cy + 10.0) as i32, 20, 0xFF000000);
+        draw_arc(
+            &mut buf,
+            size.width,
+            size.height,
+            cx as i32,
+            (cy + 10.0) as i32,
+            20,
+            0xFF000000,
+        );
 
         buf.present().unwrap();
     }
@@ -75,10 +100,14 @@ impl Renderer {
 fn draw_circle(buf: &mut [u32], width: u32, height: u32, cx: i32, cy: i32, r: i32, color: u32) {
     for y in (cy - r)..=(cy + r) {
         for x in (cx - r)..=(cx + r) {
-            if y < 0 || x < 0 || y >= height as i32 || x >= width as i32 { continue; }
+            if y < 0 || x < 0 || y >= height as i32 || x >= width as i32 {
+                continue;
+            }
             if (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r {
                 let idx = (y as u32 * width + x as u32) as usize;
-                if idx < buf.len() { buf[idx] = color; }
+                if idx < buf.len() {
+                    buf[idx] = color;
+                }
             }
         }
     }
@@ -91,7 +120,9 @@ fn draw_arc(buf: &mut [u32], width: u32, height: u32, cx: i32, cy: i32, r: i32, 
         let y = cy + (r as f64 * rad.sin() * 0.5) as i32;
         if x >= 0 && y >= 0 && x < width as i32 && y < height as i32 {
             let idx = (y as u32 * width + x as u32) as usize;
-            if idx < buf.len() { buf[idx] = color; }
+            if idx < buf.len() {
+                buf[idx] = color;
+            }
         }
     }
 }
