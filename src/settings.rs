@@ -49,14 +49,9 @@ impl Settings {
         Self::show_settings_dialog(config);
     }
 
-    pub fn toggle_auto_mode(config: &mut Config) {
-        config.auto_mode = !config.auto_mode;
-        config.save();
-    }
-
-    pub fn toggle_startup(config: &mut Config) {
-        config.startup = !config.startup;
-        if config.startup {
+    pub fn set_startup(config: &mut Config, enabled: bool) {
+        config.startup = enabled;
+        if enabled {
             Self::enable_startup();
         } else {
             Self::disable_startup();
@@ -90,12 +85,10 @@ impl Settings {
                 )
                 .is_ok()
                 {
-                    let data: &[u8] = unsafe {
-                        std::slice::from_raw_parts(
-                            exe_path_w.as_ptr() as *const u8,
-                            exe_path_w.len() * 2,
-                        )
-                    };
+                    let data: &[u8] = std::slice::from_raw_parts(
+                        exe_path_w.as_ptr() as *const u8,
+                        exe_path_w.len() * 2,
+                    );
                     let _ = RegSetValueExW(
                         hkey,
                         windows::core::PCWSTR(value_name.as_ptr()),

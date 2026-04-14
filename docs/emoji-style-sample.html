@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deskemoji Style Sample</title>
+  <style>
+    :root {
+      --bg: #efe3d2;
+      --panel: rgba(255, 250, 244, 0.8);
+      --line: rgba(96, 70, 41, 0.12);
+      --text: #4a3521;
+      --muted: #7f6751;
+      --good: #819f49;
+      --warn: #c07b22;
+      --hot: #b95c25;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.6), transparent 25%),
+        linear-gradient(180deg, #f4ecdf 0%, #e7d6c0 100%);
+      padding: 40px 24px 60px;
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      margin: 14px 0 0;
+      max-width: 900px;
+      font-size: 17px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(260px, 1fr));
+      gap: 22px;
+      margin-top: 32px;
+    }
+
+    .card {
+      overflow: hidden;
+      border-radius: 26px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 16px 40px rgba(94, 68, 34, 0.08);
+      backdrop-filter: blur(12px);
+    }
+
+    .card-head {
+      padding: 18px 20px 0;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+    }
+
+    .preview {
+      padding: 16px 18px 20px;
+    }
+
+    .desk {
+      position: relative;
+      height: 250px;
+      overflow: hidden;
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.5), transparent 30%),
+        linear-gradient(180deg, #e8ddcf 0%, #d6c4af 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+
+    .desk::after {
+      content: "";
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 20px;
+      height: 24px;
+      border-radius: 999px;
+      background: radial-gradient(ellipse at center, rgba(93, 66, 33, 0.2), rgba(93, 66, 33, 0.02) 72%);
+      filter: blur(7px);
+    }
+
+    .emoji {
+      position: absolute;
+      left: 50%;
+      top: 102px;
+      width: 118px;
+      height: 118px;
+      margin-left: -59px;
+      border-radius: 50%;
+      transform-origin: center bottom;
+    }
+
+    .current {
+      background: linear-gradient(180deg, #ffd24f 0%, #efb42f 100%);
+    }
+
+    .current .eye {
+      position: absolute;
+      top: 36px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #1f1408;
+    }
+
+    .current .eye.left { left: 30px; }
+    .current .eye.right { right: 30px; }
+
+    .current .mouth {
+      position: absolute;
+      left: 50%;
+      bottom: 30px;
+      width: 44px;
+      height: 22px;
+      margin-left: -22px;
+      border-bottom: 5px solid #241708;
+      border-radius: 0 0 28px 28px;
+    }
+
+    .recommended {
+      background:
+        radial-gradient(circle at 31% 23%, rgba(255, 255, 255, 0.9), transparent 26%),
+        radial-gradient(circle at 52% 36%, #ffd86a 0%, #ffc84c 58%, #ecad28 100%);
+      box-shadow:
+        inset 0 -7px 12px rgba(180, 112, 0, 0.16),
+        inset 0 6px 10px rgba(255, 255, 255, 0.34);
+      animation: floaty 2.6s ease-in-out infinite;
+    }
+
+    .recommended .eye {
+      position: absolute;
+      top: 32px;
+      width: 22px;
+      height: 27px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+    }
+
+    .recommended .eye.left { left: 24px; }
+    .recommended .eye.right { right: 24px; }
+
+    .recommended .pupil {
+      position: absolute;
+      left: 50%;
+      top: 9px;
+      width: 9px;
+      height: 11px;
+      margin-left: -4.5px;
+      border-radius: 50%;
+      background: #6a4500;
+      animation: glance 5.6s ease-in-out infinite;
+    }
+
+    .recommended .lid {
+      position: absolute;
+      left: 1px;
+      right: 1px;
+      top: -1px;
+      height: 0;
+      border-radius: 12px 12px 10px 10px;
+      background: #ffc94d;
+      animation: blink 6.2s infinite;
+    }
+
+    .recommended .mouth {
+      position: absolute;
+      left: 50%;
+      bottom: 29px;
+      width: 42px;
+      height: 22px;
+      margin-left: -21px;
+      border-bottom: 4px solid #764d00;
+      border-radius: 0 0 24px 24px;
+    }
+
+    .recommended .cheek {
+      position: absolute;
+      top: 64px;
+      width: 18px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 120, 120, 0.28);
+      filter: blur(1px);
+    }
+
+    .recommended .cheek.left { left: 14px; }
+    .recommended .cheek.right { right: 14px; }
+
+    .recommended .spark {
+      position: absolute;
+      right: 9px;
+      top: 11px;
+      width: 12px;
+      height: 12px;
+      background: rgba(255, 255, 255, 0.76);
+      transform: rotate(45deg);
+      clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%);
+      animation: twinkle 2.2s ease-in-out infinite;
+    }
+
+    .pet {
+      background:
+        radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.78), transparent 25%),
+        radial-gradient(circle at 50% 34%, #ffd45c 0%, #ffbf37 60%, #f09d10 100%);
+      box-shadow: inset 0 -7px 12px rgba(155, 94, 0, 0.18);
+      animation: squash 1.5s ease-in-out infinite;
+    }
+
+    .pet .brow {
+      position: absolute;
+      top: 28px;
+      width: 28px;
+      height: 8px;
+      border-radius: 999px;
+      background: #6f4600;
+    }
+
+    .pet .brow.left {
+      left: 16px;
+      transform: rotate(-14deg);
+    }
+
+    .pet .brow.right {
+      right: 16px;
+      transform: rotate(14deg);
+    }
+
+    .pet .eye {
+      position: absolute;
+      top: 45px;
+      width: 16px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+    }
+
+    .pet .eye.left { left: 25px; }
+    .pet .eye.right { right: 25px; }
+
+    .pet .pupil {
+      position: absolute;
+      left: 4px;
+      top: 4px;
+      width: 8px;
+      height: 10px;
+      border-radius: 50%;
+      background: #5f3f00;
+    }
+
+    .pet .mouth {
+      position: absolute;
+      left: 50%;
+      bottom: 20px;
+      width: 48px;
+      height: 30px;
+      margin-left: -24px;
+      border-radius: 14px 14px 22px 22px;
+      background: #7e4c00;
+    }
+
+    .pet .mouth::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 3px;
+      width: 18px;
+      height: 14px;
+      margin-left: -9px;
+      border-radius: 12px 12px 18px 18px;
+      background: #ff7b82;
+    }
+
+    .content {
+      padding: 0 20px 20px;
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    ul {
+      margin: 14px 0 0;
+      padding-left: 18px;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    .next {
+      margin-top: 28px;
+      padding: 20px 22px;
+      border-radius: 22px;
+      background: rgba(255, 250, 244, 0.72);
+      border: 1px solid var(--line);
+    }
+
+    .families {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 18px;
+      margin-top: 28px;
+    }
+
+    .family-card {
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255, 250, 244, 0.72);
+      border: 1px solid var(--line);
+      box-shadow: 0 12px 28px rgba(94, 68, 34, 0.05);
+      text-align: center;
+    }
+
+    .family-card img {
+      width: 112px;
+      height: 112px;
+      object-fit: contain;
+      display: block;
+      margin: 6px auto 12px;
+    }
+
+    .family-card h3 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .family-card p {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .family-note {
+      margin-top: 14px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-4px) scale(1.015); }
+    }
+
+    @keyframes blink {
+      0%, 44%, 48%, 100% { height: 0; }
+      45%, 47% { height: 25px; }
+    }
+
+    @keyframes glance {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-2px); }
+      52% { transform: translateX(2px); }
+      80% { transform: translateX(-1px); }
+    }
+
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.35; transform: rotate(45deg) scale(0.8); }
+      50% { opacity: 0.92; transform: rotate(45deg) scale(1.1); }
+    }
+
+    @keyframes squash {
+      0%, 100% { transform: translateY(0) scale(1, 1); }
+      40% { transform: translateY(-2px) scale(1.02, 0.98); }
+      60% { transform: translateY(2px) scale(0.97, 1.04); }
+    }
+
+    @media (max-width: 980px) {
+      .cards {
+        grid-template-columns: 1fr;
+      }
+
+      .families {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .families {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Deskemoji Sample</h1>
+    <p class="subtitle">
+      这不是最终实现，只是先让你直观看到三种视觉语言差异。中间那张是我推荐的方向：
+      先把它做得像标准 Emoji，再叠加很轻的生命感和表演感。
+    </p>
+
+    <div class="next" style="margin-top: 24px;">
+      <strong>先对齐标准 Emoji 的脸：</strong>
+      下面这 4 张是同一个 `🙂` 的不同风格参考。先看这个区块，目的是让我们先对齐“脸本身像不像标准 Emoji”，再去讨论动画。
+    </div>
+
+    <div class="families">
+      <section class="family-card">
+        <img src="https://hexmos.com/freedevtools/public/emojis/slightly-smiling-face/apple-emojis/slightly-smiling-face_1f642_iOS_18.4.png" alt="Apple emoji sample">
+        <h3>Apple</h3>
+        <p>圆润、立体、高光柔和，最接近大家心里“标准 emoji”的感觉。</p>
+      </section>
+
+      <section class="family-card">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Fluent_Emoji_Color_1f642.svg/500px-Fluent_Emoji_Color_1f642.svg.png" alt="Microsoft Fluent emoji sample">
+        <h3>Fluent</h3>
+        <p>更现代、更设计系统化，亲和但比 Apple 更干净一点。</p>
+      </section>
+
+      <section class="family-card">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Noto_Emoji_v2.034_1f642.svg/960px-Noto_Emoji_v2.034_1f642.svg.png" alt="Google Noto emoji sample">
+        <h3>Noto</h3>
+        <p>通用、规整、识别快，适合做一致性强的基底。</p>
+      </section>
+
+      <section class="family-card">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/OpenMoji-color_15.0.0_1F642.svg/512px-OpenMoji-color_15.0.0_1F642.svg.png" alt="OpenMoji sample">
+        <h3>OpenMoji</h3>
+        <p>更图标化、轮廓感强，清楚但会比系统 Emoji 更“设计稿”。</p>
+      </section>
+    </div>
+
+    <p class="family-note">
+      如果图片没加载出来，通常是本地浏览器没联网；这时你先告诉我，我就改成离线本地图片版。
+    </p>
+
+    <div class="cards">
+      <section class="card">
+        <div class="card-head">
+          <span class="dot" style="background: var(--warn);"></span>
+          Current Feel
+        </div>
+        <div class="preview">
+          <div class="desk">
+            <div class="emoji current">
+              <div class="eye left"></div>
+              <div class="eye right"></div>
+              <div class="mouth"></div>
+            </div>
+          </div>
+        </div>
+        <div class="content">
+          <h2>现在这类感觉</h2>
+          <p>能表达“桌面上有个黄脸”，但层次偏少，五官偏硬，动画一叠加就容易像贴纸在抖。</p>
+          <ul>
+            <li>脸部体积感弱</li>
+            <li>五官像单独糊上去</li>
+            <li>动作缺少缓冲和延迟</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="dot" style="background: var(--good);"></span>
+          Recommended
+        </div>
+        <div class="preview">
+          <div class="desk">
+            <div class="emoji recommended">
+              <div class="eye left">
+                <div class="pupil"></div>
+                <div class="lid"></div>
+              </div>
+              <div class="eye right">
+                <div class="pupil"></div>
+                <div class="lid"></div>
+              </div>
+              <div class="cheek left"></div>
+              <div class="cheek right"></div>
+              <div class="mouth"></div>
+              <div class="spark"></div>
+            </div>
+          </div>
+        </div>
+        <div class="content">
+          <h2>推荐方向</h2>
+          <p>主体像标准 Emoji，动画只做轻量叠加：呼吸轻浮、自然眨眼、很小的视线游移和点按回弹。</p>
+          <ul>
+            <li>脸的质感先稳定下来</li>
+            <li>动画只改局部，不整张脸乱变</li>
+            <li>看起来像活着，但不抢戏</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="dot" style="background: var(--hot);"></span>
+          Too Pet-Like
+        </div>
+        <div class="preview">
+          <div class="desk">
+            <div class="emoji pet">
+              <div class="brow left"></div>
+              <div class="brow right"></div>
+              <div class="eye left"><div class="pupil"></div></div>
+              <div class="eye right"><div class="pupil"></div></div>
+              <div class="mouth"></div>
+            </div>
+          </div>
+        </div>
+        <div class="content">
+          <h2>角色感太重的版本</h2>
+          <p>更像小宠物或游戏 NPC，表演性强，但会偏离你要的“先像系统 Emoji”的目标。</p>
+          <ul>
+            <li>辨识度高</li>
+            <li>可做夸张表演</li>
+            <li>但不够标准 Emoji</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+
+    <div class="next">
+      <strong>这版 sample 想验证什么：</strong>
+      不是最终 UI，而是先确认视觉语言。如果你觉得中间这张方向对，我下一步就给你做第二个 sample，
+      专门演示“待机、状态切换、点击反馈”怎么从僵硬变成丝滑。
+    </div>
+  </div>
+</body>
+</html>

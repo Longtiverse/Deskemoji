@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deskemoji 下一步开发计划 — 交互式规划板</title>
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --surface: #151b2b;
+            --surface-2: #1e2538;
+            --surface-3: #283049;
+            --text: #f0f4f8;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-2: #818cf8;
+            --accent-3: #f472b6;
+            --success: #4ade80;
+            --warning: #facc15;
+            --error: #f87171;
+            --border: #2d3655;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px 60px;
+        }
+        header {
+            text-align: center;
+            padding: 50px 20px;
+            background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 30px;
+        }
+        header h1 {
+            font-size: 2.4rem;
+            background: linear-gradient(90deg, var(--accent), var(--accent-3));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        header p {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: var(--surface-3); }
+        .btn.primary {
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            border-color: transparent;
+            color: #000;
+            font-weight: 600;
+        }
+        .btn.primary:hover { opacity: 0.9; }
+
+        .legend {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        .legend span { display: flex; align-items: center; gap: 6px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .dot-now { background: var(--error); }
+        .dot-short { background: var(--warning); }
+        .dot-mid { background: var(--accent); }
+        .dot-long { background: var(--accent-2); }
+
+        .phase-section {
+            margin-bottom: 32px;
+        }
+        .phase-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border);
+        }
+        .phase-badge {
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .badge-now { background: var(--error); color: #fff; }
+        .badge-short { background: var(--warning); color: #000; }
+        .badge-mid { background: var(--accent); color: #000; }
+        .badge-long { background: var(--accent-2); color: #fff; }
+        .phase-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+        .phase-sub {
+            margin-left: auto;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px 22px;
+            margin-bottom: 14px;
+            transition: border-color 0.2s, transform 0.15s;
+        }
+        .card:hover { border-color: var(--surface-3); }
+        .card.approved { border-left: 4px solid var(--success); }
+        .card.rejected { border-left: 4px solid var(--error); opacity: 0.85; }
+        .card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            flex: 1;
+        }
+        .card-desc {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 14px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .control-group select,
+        .control-group input[type="text"] {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+        }
+        .range-val {
+            font-size: 0.8rem;
+            color: var(--accent);
+            margin-left: 6px;
+        }
+
+        .toggle-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .toggle-btn {
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.85rem;
+            user-select: none;
+            transition: all 0.15s;
+        }
+        .toggle-btn.active {
+            background: var(--success);
+            border-color: var(--success);
+            color: #000;
+            font-weight: 600;
+        }
+        .toggle-btn.rej.active {
+            background: var(--error);
+            border-color: var(--error);
+            color: #fff;
+        }
+
+        .comment-box {
+            width: 100%;
+            min-height: 60px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 0.95rem;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .comment-box::placeholder { color: #64748b; }
+
+        .summary-panel {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            width: 340px;
+            max-height: 70vh;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            overflow-y: auto;
+            z-index: 100;
+            transition: transform 0.3s;
+        }
+        .summary-panel.collapsed {
+            transform: translateY(calc(100% - 50px));
+        }
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            cursor: pointer;
+        }
+        .summary-header h3 { font-size: 1rem; }
+        .summary-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+        .summary-stat span:last-child { font-weight: 600; }
+        .summary-list {
+            margin-top: 12px;
+            font-size: 0.85rem;
+        }
+        .summary-item {
+            padding: 6px 0;
+            border-bottom: 1px dashed var(--border);
+        }
+        .summary-item small {
+            color: var(--text-muted);
+            display: block;
+            margin-top: 2px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            padding: 20px;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        .modal h2 {
+            margin-bottom: 16px;
+            font-size: 1.3rem;
+        }
+        .modal pre {
+            background: var(--bg);
+            padding: 16px;
+            border-radius: 10px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 16px;
+        }
+
+        @media (max-width: 900px) {
+            .summary-panel {
+                width: calc(100% - 40px);
+                right: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Deskemoji 下一步开发计划</h1>
+        <p>交互式规划板 — 请针对每个方向给出你的具体指导意见</p>
+    </header>
+
+    <div class="container">
+        <div class="toolbar">
+            <button class="btn primary" onclick="exportPlan()">📋 导出我的决策</button>
+            <button class="btn" onclick="resetAll()">🔄 重置所有选择</button>
+            <button class="btn" onclick="approveAll()">✅ 全部采纳</button>
+        </div>
+
+        <div class="legend">
+            <span><span class="dot dot-now"></span> 立刻执行</span>
+            <span><span class="dot dot-short"></span> 短期（1-4周）</span>
+            <span><span class="dot dot-mid"></span> 中期（1-3个月）</span>
+            <span><span class="dot dot-long"></span> 长期（3个月+）</span>
+        </div>
+
+        <!-- 立刻执行 -->
+        <div class="phase-section" data-phase="now">
+            <div class="phase-header">
+                <span class="phase-badge badge-now">立刻</span>
+                <span class="phase-title">生死线与第一印象优化</span>
+                <span class="phase-sub">2 个核心任务</span>
+            </div>
+
+            <div class="card" data-id="p1-1" data-title="游戏/全屏勿扰模式">
+                <div class="card-header">
+                    <div class="card-title">🎮 游戏/全屏勿扰模式</div>
+                </div>
+                <div class="card-desc">
+                    检测用户进入全屏游戏或视频时，自动降低透明度或隐藏到托盘。这是防止电竞/影音用户卸载的<strong>生死线功能</strong>。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="5" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">5</span>
+                    </div>
+                    <div class="control-group">
+                        <label>实现方式倾向</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="detect_fullscreen_api">调用 Win32 API 检测全屏窗口</option>
+                            <option value="whitelist_games">维护常见游戏进程白名单</option>
+                            <option value="user_hotkey">用户手动快捷键隐藏/显示</option>
+                            <option value="auto_low_opacity">自动降低透明度而非隐藏</option>
+                            <option value="other">其他（请在备注说明）</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：比如检测哪些应用、隐藏行为细节、是否有例外场景..."></textarea>
+            </div>
+
+            <div class="card" data-id="p1-2" data-title="新用户 Onboarding 引导">
+                <div class="card-header">
+                    <div class="card-title">🌟 新用户 Onboarding 引导</div>
+                </div>
+                <div class="card-desc">
+                    首次启动时通过简短动画演示核心交互。当前很多精妙设计（如快速晃鼠标触发闭眼）用户根本发现不了。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="4" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">4</span>
+                    </div>
+                    <div class="control-group">
+                        <label>引导形式</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="animated_tour">启动时 Emoji 自动表演 3 个交互</option>
+                            <option value="tooltip_sequence">气泡提示序列（1-2-3步）</option>
+                            <option value="gif_demo">右键菜单常驻"看演示"入口</option>
+                            <option value="skip_option">引导必须可跳过，且只展示一次</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：引导步骤数量、展示时机、是否可重新观看..."></textarea>
+            </div>
+        </div>
+
+        <!-- 短期 -->
+        <div class="phase-section" data-phase="short">
+            <div class="phase-header">
+                <span class="phase-badge badge-short">短期</span>
+                <span class="phase-title">增长与留存引擎</span>
+                <span class="phase-sub">3 个核心任务</span>
+            </div>
+
+            <div class="card" data-id="p2-1" data-title="截图分享卡片（病毒传播核心）">
+                <div class="card-header">
+                    <div class="card-title">📸 截图分享卡片（病毒传播核心）</div>
+                </div>
+                <div class="card-desc">
+                    右键菜单增加"生成今日状态卡片"，输出精美图片（Emoji + CPU/内存数据 + 文案），适配社交媒体传播。底部带品牌水印和官网/Steam 链接。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="5" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">5</span>
+                    </div>
+                    <div class="control-group">
+                        <label>分享内容侧重</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="system_status">主打系统状态（CPU/内存/工作时间）</option>
+                            <option value="emotional_quote">主打情绪文案 + Emoji 表情</option>
+                            <option value="weekly_report">生成周报风格的长图</option>
+                            <option value="pure_aesthetic">纯美学设计，弱化数据</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>分发渠道优先</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="xiaohongshu">小红书（1:1 或 3:4）</option>
+                            <option value="twitter">Twitter/X（1:1）</option>
+                            <option value="wechat">微信朋友圈（9:16 故事模式）</option>
+                            <option value="douyin">抖音（9:16）</option>
+                            <option value="universal">通用比例（1:1 为主）</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：文案风格、是否允许去水印、生成频率限制、图片尺寸..."></textarea>
+            </div>
+
+            <div class="card" data-id="p2-2" data-title="成就与彩蛋系统">
+                <div class="card-header">
+                    <div class="card-title">🏆 成就与彩蛋系统</div>
+                </div>
+                <div class="card-desc">
+                    增加趣味成就解锁机制：连续开机 7 天获得隐藏表情、深夜使用触发关心对话、CPU 爆表时触发特殊动画。用游戏化设计对抗新鲜感衰退。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="4" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">4</span>
+                    </div>
+                    <div class="control-group">
+                        <label>成就类型侧重</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="usage_time">使用时长类（累计、连续）</option>
+                            <option value="system_events">系统事件类（高温、高内存、深夜）</option>
+                            <option value="interaction">交互探索类（发现隐藏动作）</option>
+                            <option value="seasonal">节日限定类（圣诞、春节皮肤）</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：想要的彩蛋、成就奖励形式、是否需要通知弹窗..."></textarea>
+            </div>
+
+            <div class="card" data-id="p2-3" data-title="社交状态同步">
+                <div class="card-header">
+                    <div class="card-title">💬 社交状态同步</div>
+                </div>
+                <div class="card-desc">
+                    将当前 Emoji 状态同步到 Discord Rich Presence、QQ 状态、微信状态。让用户的"桌面心情"成为社交身份的一部分。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">3</span>
+                    </div>
+                    <div class="control-group">
+                        <label>优先接入平台</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="discord">Discord Rich Presence（技术最成熟）</option>
+                            <option value="qq">QQ 状态（国内年轻用户）</option>
+                            <option value="wechat">微信状态（覆盖最广，但 API 受限）</option>
+                            <option value="steam">Steam 状态（如果上 Steam）</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：同步频率、隐私顾虑、展示内容粒度..."></textarea>
+            </div>
+        </div>
+
+        <!-- 中期 -->
+        <div class="phase-section" data-phase="mid">
+            <div class="phase-header">
+                <span class="phase-badge badge-mid">中期</span>
+                <span class="phase-title">深度价值与商业化</span>
+                <span class="phase-sub">3 个核心任务</span>
+            </div>
+
+            <div class="card" data-id="p3-1" data-title="AI 人格化升级">
+                <div class="card-header">
+                    <div class="card-title">🤖 AI 人格化升级</div>
+                </div>
+                <div class="card-desc">
+                    给 Emoji 设定名字和性格（傲娇、温柔、毒舌），接入轻量级本地 LLM 或云端 API。让它能主动关心用户："你已经连续工作 3 小时了，喝口水吧~"
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="5" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">5</span>
+                    </div>
+                    <div class="control-group">
+                        <label>AI 实现方案</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="local_llm">本地轻量 LLM（隐私好，但性能受限）</option>
+                            <option value="cloud_api">云端 API（OpenAI/Claude/国产）</option>
+                            <option value="preset_dialogues">大量预设对话树（无需 AI）</option>
+                            <option value="hybrid">混合：日常用预设，深度用云端</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>人格风格</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="gentle">温柔治愈系</option>
+                            <option value="tsundere">傲娇吐槽系</option>
+                            <option value="nerd">极客科普系</option>
+                            <option value="motivator">毒鸡汤激励系</option>
+                            <option value="custom">完全自定义</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：是否必须联网、对话触发频率、隐私边界、是否支持用户自定义 prompt..."></textarea>
+            </div>
+
+            <div class="card" data-id="p3-2" data-title="数据可视化周报">
+                <div class="card-header">
+                    <div class="card-title">📊 数据可视化周报</div>
+                </div>
+                <div class="card-desc">
+                    每周生成"你的电脑心情周报"：用可爱的图表总结 CPU 压力曲线、高频表情、工作时长。增加产品的实用价值和分享价值。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="4" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">4</span>
+                    </div>
+                    <div class="control-group">
+                        <label>周报触达方式</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="popup">每周一开机时弹窗展示</option>
+                            <option value="email">邮件周报</option>
+                            <option value="in_app_history">应用内历史记录页面</option>
+                            <option value="share_card_only">只做可分享的卡片，不主动推送</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：周报包含哪些数据、风格偏向可爱还是专业、是否需要导出..."></textarea>
+            </div>
+
+            <div class="card" data-id="p3-3" data-title="皮肤/表情商店">
+                <div class="card-header">
+                    <div class="card-title">🛍️ 皮肤/表情商店</div>
+                </div>
+                <div class="card-desc">
+                    开放皮肤 SDK，引入第三方创作者。提供像素风、二次元、企业 IP 等多样化皮肤。平台抽成 20-30%，建立内容生态护城河。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">3</span>
+                    </div>
+                    <div class="control-group">
+                        <label>商业模式</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="marketplace">内置市场，官方+第三方并存</option>
+                            <option value="steam_workshop">Steam Workshop 托管</option>
+                            <option value="free_only">完全免费，社区自发分享</option>
+                            <option value="dlc">官方 DLC 包形式</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：最想要的皮肤风格、对创作者门槛的要求、定价区间..."></textarea>
+            </div>
+        </div>
+
+        <!-- 长期 -->
+        <div class="phase-section" data-phase="long">
+            <div class="phase-header">
+                <span class="phase-badge badge-long">长期</span>
+                <span class="phase-title">平台扩展与前沿交互</span>
+                <span class="phase-sub">2 个核心任务</span>
+            </div>
+
+            <div class="card" data-id="p4-1" data-title="跨平台战略">
+                <div class="card-header">
+                    <div class="card-title">🍎 跨平台战略（macOS / Linux）</div>
+                </div>
+                <div class="card-desc">
+                    推出 macOS Menu Bar 版本和 Linux 版本。macOS 用户在小红书和 Twitter 上的传播力极强，且桌面宠物类内容在苹果生态中几乎空白。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="4" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">4</span>
+                    </div>
+                    <div class="control-group">
+                        <label>优先平台</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="macos">macOS（传播力强、付费意愿高）</option>
+                            <option value="linux">Linux（开发者社区友好）</option>
+                            <option value="web">Web 版本（作为预览和轻量版）</option>
+                            <option value="mobile">移动端 Widget（iOS/Android）</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：跨平台技术选型（如 Tauri、Flutter）、macOS 形态偏好（Menu Bar vs 桌面浮窗）..."></textarea>
+            </div>
+
+            <div class="card" data-id="p4-2" data-title="语音与手势交互">
+                <div class="card-header">
+                    <div class="card-title">🎙️ 语音与手势交互</div>
+                </div>
+                <div class="card-desc">
+                    支持语音命令切换表情（"我困了"→sleepy），或调用摄像头实现手势互动（挥手打招呼）。进一步提升产品的黑科技感和情感连接深度。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                            <span class="toggle-btn" onclick="setDecision(this, 'pending')">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="2" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">2</span>
+                    </div>
+                    <div class="control-group">
+                        <label>优先方向</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="voice">语音命令控制</option>
+                            <option value="gesture">摄像头手势识别</option>
+                            <option value="both">两者都做</option>
+                            <option value="neither">都觉得噱头大于实用</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="你的具体指导意见：具体想用的语音指令、对隐私/摄像头的顾虑、使用场景..."></textarea>
+            </div>
+        </div>
+
+        <!-- 补充：技术债清理 -->
+        <div class="phase-section" data-phase="tech">
+            <div class="phase-header">
+                <span class="phase-badge" style="background:#334155;color:#fff;">技术</span>
+                <span class="phase-title">技术债与工程优化</span>
+                <span class="phase-sub">5 个核心任务</span>
+            </div>
+
+            <div class="card" data-id="t1" data-title="清理 menu.rs 死代码">
+                <div class="card-header"><div class="card-title">🧹 清理 menu.rs 死代码</div></div>
+                <div class="card-desc">tray-icon 菜单逻辑在 main.rs 中未被使用，主程序使用 Win32 API 自建菜单。</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">3</span>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="指导意见：统一用 Win32 API 还是统一用 tray-icon crate？"></textarea>
+            </div>
+
+            <div class="card" data-id="t2" data-title="拆分 renderer.rs">
+                <div class="card-header"><div class="card-title">📦 拆分 renderer.rs</div></div>
+                <div class="card-desc">1156 行承载了渲染器、动画数学、UI 绘制、位图字体等多重职责。</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="4" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">4</span>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="指导意见：期望的拆分方式、子模块命名..."></textarea>
+            </div>
+
+            <div class="card" data-id="t3" data-title="引入 GitHub Actions CI/CD">
+                <div class="card-header"><div class="card-title">⚙️ 引入 GitHub Actions CI/CD</div></div>
+                <div class="card-desc">当前完全手动构建和发布，dist/ 下有 10+ 个历史手动版本。</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="4" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">4</span>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="指导意见：是否需要自动发布到 GitHub Releases、是否做代码签名..."></textarea>
+            </div>
+
+            <div class="card" data-id="t4" data-title="可视化设置窗口">
+                <div class="card-header"><div class="card-title">🪟 可视化设置窗口</div></div>
+                <div class="card-desc">当前设置通过 MessageBoxW 显示 JSON 文本，没有真正的设置 UI。</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">3</span>
+                    </div>
+                    <div class="control-group">
+                        <label>实现方式</label>
+                        <select>
+                            <option value="">请选择...</option>
+                            <option value="native_win32">原生 Win32 对话框</option>
+                            <option value="webview">内嵌 WebView（如 tao + webview2）</option>
+                            <option value="imgui">Dear ImGui 快速搭建</option>
+                            <option value="softbuffer_ui">继续用 softbuffer 自绘 UI</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="指导意见：设置项优先级、UI 风格偏好..."></textarea>
+            </div>
+
+            <div class="card" data-id="t5" data-title="Magic Numbers 常量化">
+                <div class="card-header"><div class="card-title">🔢 Magic Numbers 常量化</div></div>
+                <div class="card-desc">大量阈值、动画参数、坐标硬编码，建议抽取为配置或常量模块。</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" onclick="setDecision(this, 'approved')">✅ 纳入计划</span>
+                            <span class="toggle-btn rej" onclick="setDecision(this, 'rejected')">❌ 暂不处理</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级调整</label>
+                        <input type="range" min="1" max="5" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="range-val">3</span>
+                    </div>
+                </div>
+                <textarea class="comment-box" placeholder="指导意见：哪些参数最应该暴露给用户配置？"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浮动汇总面板 -->
+    <div class="summary-panel" id="summaryPanel">
+        <div class="summary-header" onclick="toggleSummary()">
+            <h3>📊 实时决策汇总</h3>
+            <span id="summaryToggle">▼</span>
+        </div>
+        <div class="summary-stat"><span>已采纳</span><span id="countApproved" style="color:var(--success)">0</span></div>
+        <div class="summary-stat"><span>已拒绝</span><span id="countRejected" style="color:var(--error)">0</span></div>
+        <div class="summary-stat"><span>待定</span><span id="countPending" style="color:var(--warning)">0</span></div>
+        <div class="summary-stat"><span>未决策</span><span id="countNone" style="color:var(--text-muted)">0</span></div>
+        <div class="summary-list" id="summaryList"></div>
+    </div>
+
+    <!-- 导出弹窗 -->
+    <div class="modal-overlay" id="exportModal" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+            <h2>📝 导出决策结果</h2>
+            <p style="color:var(--text-muted);margin-bottom:12px;">请复制以下内容，发回给开发团队作为执行依据。</p>
+            <pre id="exportContent"></pre>
+            <div class="modal-actions">
+                <button class="btn" onclick="copyExport()">📋 复制到剪贴板</button>
+                <button class="btn primary" onclick="closeModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function setDecision(btn, state) {
+            const row = btn.closest('.toggle-row');
+            row.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const card = btn.closest('.card');
+            card.classList.remove('approved', 'rejected');
+            if (state === 'approved') card.classList.add('approved');
+            if (state === 'rejected') card.classList.add('rejected');
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const cards = document.querySelectorAll('.card');
+            let approved = 0, rejected = 0, pending = 0, none = 0;
+            const list = [];
+            cards.forEach(card => {
+                const active = card.querySelector('.toggle-row .toggle-btn.active');
+                const title = card.dataset.title;
+                let state = 'none';
+                if (active) {
+                    if (active.textContent.includes('纳入')) { approved++; state = 'approved'; }
+                    else if (active.textContent.includes('拒绝')) { rejected++; state = 'rejected'; }
+                    else if (active.textContent.includes('待定')) { pending++; state = 'pending'; }
+                } else {
+                    none++;
+                }
+
+                const priority = card.querySelector('input[type="range"]')?.value || '-';
+                const comment = card.querySelector('.comment-box')?.value.trim() || '';
+                const selects = Array.from(card.querySelectorAll('select')).map(s => s.value).filter(v => v);
+
+                if (state !== 'none') {
+                    let meta = `优先级:${priority}`;
+                    if (selects.length) meta += ` | 选项:${selects.join(',')}`;
+                    if (comment) meta += ` | 备注:"${comment.substring(0,40)}${comment.length>40?'...':''}"`;
+                    list.push({ title, state, meta });
+                }
+            });
+
+            document.getElementById('countApproved').textContent = approved;
+            document.getElementById('countRejected').textContent = rejected;
+            document.getElementById('countPending').textContent = pending;
+            document.getElementById('countNone').textContent = none;
+
+            const listEl = document.getElementById('summaryList');
+            listEl.innerHTML = list.length
+                ? list.map(i => `<div class="summary-item"><strong>${i.state==='approved'?'✅':i.state==='rejected'?'❌':'🤔'} ${i.title}</strong><small>${i.meta}</small></div>`).join('')
+                : '<div style="color:#64748b;padding-top:8px;">暂无决策记录，请对卡片进行选择...</div>';
+        }
+
+        function toggleSummary() {
+            document.getElementById('summaryPanel').classList.toggle('collapsed');
+            document.getElementById('summaryToggle').textContent =
+                document.getElementById('summaryPanel').classList.contains('collapsed') ? '▲' : '▼';
+        }
+
+        function resetAll() {
+            if (!confirm('确定要重置所有选择和评论吗？')) return;
+            document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('approved', 'rejected'));
+            document.querySelectorAll('input[type="range"]').forEach(r => {
+                const def = r.closest('.card').dataset.phase === 'now' ? 5 :
+                            r.closest('.card').dataset.id?.startsWith('p2') ? (r.closest('.card').dataset.title.includes('截图')?5:4) :
+                            r.closest('.card').dataset.id?.startsWith('p3') ? (r.closest('.card').dataset.title.includes('AI')?5:4) :
+                            r.closest('.card').dataset.id?.startsWith('p4') ? (r.closest('.card').dataset.title.includes('跨平台')?4:2) :
+                            r.closest('.card').dataset.id?.startsWith('t') ? ([1,3,4,3,3][parseInt(r.closest('.card').dataset.id[1])-1]||3) : 3;
+                r.value = def;
+                r.nextElementSibling.textContent = def;
+            });
+            document.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+            document.querySelectorAll('.comment-box').forEach(t => t.value = '');
+            updateSummary();
+        }
+
+        function approveAll() {
+            document.querySelectorAll('.card').forEach(card => {
+                const btn = card.querySelector('.toggle-row .toggle-btn');
+                if (btn) setDecision(btn, 'approved');
+            });
+        }
+
+        function exportPlan() {
+            const cards = document.querySelectorAll('.card');
+            const phases = { now: [], short: [], mid: [], long: [], tech: [] };
+            let hasDecision = false;
+
+            cards.forEach(card => {
+                const active = card.querySelector('.toggle-row .toggle-btn.active');
+                if (!active) return;
+                hasDecision = true;
+                const title = card.dataset.title;
+                const phase = card.closest('.phase-section').dataset.phase;
+                const state = active.textContent.includes('纳入') ? '✅ 采纳' :
+                              active.textContent.includes('拒绝') ? '❌ 拒绝' : '🤔 待定';
+                const priority = card.querySelector('input[type="range"]')?.value || '-';
+                const selects = Array.from(card.querySelectorAll('select')).map(s => {
+                    const label = s.previousElementSibling?.textContent || '';
+                    return s.value ? `${label}:${s.value}` : null;
+                }).filter(Boolean);
+                const comment = card.querySelector('.comment-box')?.value.trim() || '';
+
+                let line = `${state} | 优先级:${priority} | ${title}`;
+                if (selects.length) line += `\n  选项 → ${selects.join(' | ')}`;
+                if (comment) line += `\n  备注 → ${comment}`;
+                phases[phase].push(line);
+            });
+
+            if (!hasDecision) {
+                alert('请先对一些项目做出决策再导出。');
+                return;
+            }
+
+            const phaseNames = {
+                now: '🚨 立刻执行',
+                short: '⚡ 短期（1-4周）',
+                mid: '📅 中期（1-3个月）',
+                long: '🔮 长期（3个月+）',
+                tech: '🛠️ 技术债'
+            };
+
+            let out = `Deskemoji 下一步开发计划 — 决策结果\n生成时间：${new Date().toLocaleString('zh-CN')}\n=====================================\n`;
+            for (const [k, v] of Object.entries(phases)) {
+                if (v.length) {
+                    out += `\n${phaseNames[k]}\n${'-'.repeat(phaseNames[k].length)}\n` + v.join('\n\n') + '\n';
+                }
+            }
+
+            document.getElementById('exportContent').textContent = out;
+            document.getElementById('exportModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('exportModal').classList.remove('active');
+        }
+
+        async function copyExport() {
+            const text = document.getElementById('exportContent').textContent;
+            await navigator.clipboard.writeText(text);
+            alert('已复制到剪贴板！');
+        }
+
+        // 绑定评论和选择框变化
+        document.querySelectorAll('.comment-box, select, input[type="range"]').forEach(el => {
+            el.addEventListener('input', updateSummary);
+            el.addEventListener('change', updateSummary);
+        });
+
+        // 初始化
+        updateSummary();
+    </script>
+</body>
+</html>

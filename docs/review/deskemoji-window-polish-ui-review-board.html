@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deskemoji 桌面互动观感 Review Board</title>
+  <style>
+    :root {
+      --bg-a: #f8efdf;
+      --bg-b: #efe2d0;
+      --bg-c: #e8efe8;
+      --panel: rgba(255, 251, 244, 0.78);
+      --panel-strong: rgba(255, 251, 244, 0.92);
+      --line: rgba(61, 44, 24, 0.12);
+      --text: #2d2015;
+      --muted: #75624d;
+      --accent: #c96d34;
+      --accent-2: #1f7d71;
+      --accent-3: #d44949;
+      --shadow: 0 24px 60px rgba(76, 53, 26, 0.14);
+      --radius: 30px;
+      --desktop-shadow: 0 28px 70px rgba(70, 47, 20, 0.18);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Aptos", "Segoe UI", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(224, 132, 83, 0.18), transparent 26rem),
+        radial-gradient(circle at top right, rgba(72, 152, 142, 0.12), transparent 26rem),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b) 56%, var(--bg-c));
+      min-height: 100vh;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 310px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 26px 22px;
+      border-right: 1px solid var(--line);
+      background: rgba(249, 241, 228, 0.88);
+      backdrop-filter: blur(16px);
+      overflow: auto;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.64);
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .kicker::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, #f69d57, #c96d34);
+    }
+
+    .sidebar h1,
+    .screen-title h2,
+    .hero h2 {
+      margin: 0;
+      font-family: "Georgia", "Times New Roman", serif;
+      letter-spacing: -0.03em;
+    }
+
+    .sidebar h1 {
+      margin-top: 16px;
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .sidebar p,
+    .hero p,
+    .screen-title p,
+    .zone p,
+    .meta,
+    .caption {
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .nav {
+      display: grid;
+      gap: 10px;
+      margin: 26px 0 22px;
+    }
+
+    .nav a {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 11px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 252, 247, 0.72);
+      color: inherit;
+      text-decoration: none;
+      box-shadow: 0 10px 24px rgba(60, 44, 25, 0.05);
+    }
+
+    .num,
+    .pin {
+      display: inline-grid;
+      place-items: center;
+      min-width: 34px;
+      height: 34px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #2e241b;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .content {
+      padding: 34px clamp(18px, 4vw, 54px) 52px;
+    }
+
+    .hero {
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 36px;
+      background: linear-gradient(135deg, rgba(255, 252, 247, 0.92), rgba(244, 231, 208, 0.78));
+      box-shadow: var(--shadow);
+    }
+
+    .hero h2 {
+      margin: 12px 0 10px;
+      font-size: clamp(30px, 4.8vw, 56px);
+      line-height: 0.96;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .pill {
+      padding: 14px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.62);
+    }
+
+    .pill strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 15px;
+    }
+
+    .board {
+      display: grid;
+      gap: 24px;
+      margin-top: 28px;
+    }
+
+    .screen {
+      display: grid;
+      grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+      gap: 24px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 34px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .screen-title {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .screen-title h2 {
+      margin-bottom: 6px;
+      font-size: 38px;
+      line-height: 1;
+    }
+
+    .zones {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .zone {
+      padding: 14px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: rgba(255, 252, 246, 0.88);
+    }
+
+    .zone strong {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .note {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px dashed rgba(61, 44, 24, 0.2);
+      background: rgba(255, 250, 242, 0.7);
+      color: var(--muted);
+    }
+
+    .mock {
+      min-height: 670px;
+      padding: 18px;
+      border-radius: 30px;
+      background: linear-gradient(180deg, #fffaf2, #efe5d6);
+      border: 1px solid rgba(61, 44, 24, 0.1);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .desktop {
+      position: relative;
+      height: 100%;
+      border-radius: 26px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.58), transparent 32%),
+        linear-gradient(180deg, #eadfce, #d7c5af);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+    }
+
+    .desktop::after {
+      content: "";
+      position: absolute;
+      left: 28px;
+      right: 28px;
+      bottom: 20px;
+      height: 34px;
+      border-radius: 999px;
+      background: radial-gradient(ellipse at center, rgba(88, 62, 30, 0.22), rgba(88, 62, 30, 0.02) 72%);
+      filter: blur(8px);
+    }
+
+    .menu-bar {
+      display: flex;
+      justify-content: space-between;
+      padding: 18px 20px;
+      font-size: 13px;
+      color: rgba(45, 32, 21, 0.65);
+    }
+
+    .widget-wrap {
+      position: absolute;
+      right: 26px;
+      bottom: 34px;
+      width: 160px;
+      height: 170px;
+    }
+
+    .widget-shadow {
+      position: absolute;
+      left: 18px;
+      right: 16px;
+      bottom: 2px;
+      height: 26px;
+      border-radius: 999px;
+      background: radial-gradient(ellipse at center, rgba(52, 36, 18, 0.28), rgba(52, 36, 18, 0.04) 72%);
+      filter: blur(10px);
+      opacity: 0.88;
+    }
+
+    .widget-halo {
+      position: absolute;
+      inset: 20px 14px 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 196, 74, 0.24), rgba(255, 196, 74, 0));
+      transform: scale(1.14);
+      animation: breathe 4s ease-in-out infinite;
+    }
+
+    .widget {
+      position: absolute;
+      left: 18px;
+      top: 8px;
+      width: 124px;
+      height: 124px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 28%),
+        radial-gradient(circle at 50% 42%, rgba(255, 202, 80, 0.95), rgba(239, 175, 39, 0.95));
+      box-shadow:
+        inset 0 -8px 14px rgba(166, 100, 5, 0.14),
+        inset 0 8px 16px rgba(255, 255, 255, 0.28),
+        0 16px 40px rgba(133, 89, 20, 0.16);
+      transform-origin: center bottom;
+      animation: floaty 3.4s ease-in-out infinite;
+    }
+
+    .emoji {
+      font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+      font-size: 88px;
+      line-height: 1;
+      filter: saturate(1.04);
+      user-select: none;
+    }
+
+    .eyes {
+      position: absolute;
+      inset: 34px 0 auto;
+      display: flex;
+      justify-content: center;
+      gap: 34px;
+      pointer-events: none;
+    }
+
+    .eye {
+      position: relative;
+      width: 22px;
+      height: 26px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      opacity: 0.96;
+    }
+
+    .pupil {
+      position: absolute;
+      width: 9px;
+      height: 11px;
+      top: 8px;
+      left: 7px;
+      border-radius: 50%;
+      background: #684100;
+    }
+
+    .look-right .pupil { transform: translateX(4px); }
+    .look-up .pupil { transform: translate(3px, -2px); }
+
+    .cursor {
+      position: absolute;
+      width: 18px;
+      height: 26px;
+      background: #fff;
+      clip-path: polygon(0 0, 0 100%, 28% 74%, 42% 98%, 56% 92%, 42% 68%, 100% 68%);
+      filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.2));
+    }
+
+    .bubble {
+      position: absolute;
+      min-width: 120px;
+      max-width: 170px;
+      padding: 12px 14px;
+      border-radius: 20px;
+      background: rgba(255, 251, 244, 0.96);
+      border: 1px solid rgba(61, 44, 24, 0.12);
+      box-shadow: 0 18px 34px rgba(69, 49, 25, 0.14);
+      color: #3a291a;
+    }
+
+    .bubble::after {
+      content: "";
+      position: absolute;
+      bottom: -9px;
+      left: 22px;
+      width: 18px;
+      height: 18px;
+      background: inherit;
+      border-right: 1px solid rgba(61, 44, 24, 0.12);
+      border-bottom: 1px solid rgba(61, 44, 24, 0.12);
+      transform: rotate(45deg);
+    }
+
+    .bubble strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .stat {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(219, 86, 86, 0.1);
+      color: #a83b3b;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .chip {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(61, 44, 24, 0.08);
+      font-size: 12px;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .mini-scene {
+      position: relative;
+      height: 190px;
+      padding: 14px;
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(227, 214, 192, 0.78));
+      overflow: hidden;
+      border: 1px solid rgba(61, 44, 24, 0.08);
+    }
+
+    .mini-label {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(45, 32, 21, 0.62);
+    }
+
+    .mini-widget {
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 28%),
+        radial-gradient(circle at 50% 42%, #ffd46a, #f0aa2a);
+      box-shadow:
+        inset 0 -6px 12px rgba(166, 100, 5, 0.16),
+        inset 0 6px 10px rgba(255, 255, 255, 0.2),
+        0 14px 26px rgba(122, 84, 21, 0.14);
+    }
+
+    .mini-widget .emoji { font-size: 56px; }
+
+    .mini-widget.tap {
+      animation: tap 1.2s ease-in-out infinite;
+      transform-origin: center bottom;
+    }
+
+    .mini-widget.hot {
+      background:
+        radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0) 28%),
+        radial-gradient(circle at 50% 42%, #ffd15f, #ef9b24);
+    }
+
+    .mini-bubble {
+      position: absolute;
+      left: 16px;
+      top: 42px;
+      padding: 8px 10px;
+      border-radius: 16px;
+      background: rgba(255, 251, 244, 0.94);
+      border: 1px solid rgba(61, 44, 24, 0.12);
+      box-shadow: 0 12px 24px rgba(71, 51, 27, 0.12);
+      font-size: 12px;
+    }
+
+    .mini-bubble.warn {
+      background: rgba(255, 247, 244, 0.96);
+      color: #9e3636;
+    }
+
+    .meter {
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 22px;
+      background: rgba(255, 252, 246, 0.92);
+      border: 1px solid rgba(61, 44, 24, 0.08);
+    }
+
+    .meter-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: rgba(45, 32, 21, 0.72);
+    }
+
+    .bar {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(100, 73, 42, 0.09);
+    }
+
+    .fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #f1a54b, #dd5c43);
+    }
+
+    .footer-note {
+      margin-top: 24px;
+      padding: 18px 20px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: var(--panel-strong);
+      color: var(--muted);
+    }
+
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-6px) scale(1.018); }
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1.1); opacity: 0.72; }
+      50% { transform: scale(1.18); opacity: 0.92; }
+    }
+
+    @keyframes tap {
+      0%, 100% { transform: translateY(0) scale(1); }
+      20% { transform: translateY(4px) scale(0.95, 0.92); }
+      45% { transform: translateY(-6px) scale(1.02, 1.04); }
+      70% { transform: translateY(0) scale(0.99); }
+    }
+
+    @media (max-width: 1180px) {
+      .layout {
+        display: block;
+      }
+
+      .sidebar {
+        position: relative;
+        height: auto;
+      }
+
+      .screen {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .hero-grid,
+      .comparison,
+      .zones {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <span class="kicker">Deskemoji Review</span>
+      <h1>桌面互动观感板</h1>
+      <p>这版先不纠结代码实现，而是把你关心的“标准 emoji 样式不变 + 更有互动感 + 更融入桌面”放在同一张 review board 里，方便我们快速收敛。</p>
+
+      <nav class="nav">
+        <a href="#screen-01"><span class="num">01</span><span>默认常驻状态</span></a>
+        <a href="#screen-02"><span class="num">02</span><span>鼠标互动与小表情</span></a>
+        <a href="#screen-03"><span class="num">03</span><span>资源告警与对话框</span></a>
+      </nav>
+
+      <p class="meta">你可以直接按编号反馈，比如：</p>
+      <p class="meta">“把 01.2 的阴影做得再轻一点”</p>
+      <p class="meta">“03.1 的 CPU 对话框太打扰，改成更克制的提示”</p>
+      <p class="meta">“02.3 的眼睛跟随可以更灵一点，但不要脱离标准 emoji 本体”</p>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <span class="kicker">方向提案</span>
+        <h2>让它像标准 emoji，<br />但像桌宠一样活一点。</h2>
+        <p>当前提案是：主体仍然保持你确认过的标准 emoji 资源，不再重画五官；互动感通过“窗口落点、柔和阴影、轻微浮动、鼠标注视、点击回弹、状态气泡、小表情粒子”这些外围层来补，不去破坏 emoji 本体。</p>
+        <div class="hero-grid">
+          <div class="pill">
+            <strong>优先级 1</strong>
+            标准 emoji 依旧是视觉主角，任何互动都不能把它改成另一套画风。
+          </div>
+          <div class="pill">
+            <strong>优先级 2</strong>
+            互动做“轻陪伴感”，不是夸张卡通化，尽量保持桌面安静。
+          </div>
+          <div class="pill">
+            <strong>优先级 3</strong>
+            告警信息最好是“被看见但不烦”，必要时再升级为更明显的气泡。
+          </div>
+        </div>
+      </section>
+
+      <section class="board">
+        <article class="screen" id="screen-01">
+          <div class="mock">
+            <div class="desktop">
+              <div class="menu-bar">
+                <span>Desk • 10:24 AM</span>
+                <span>Quiet desktop mode</span>
+              </div>
+
+              <div class="widget-wrap">
+                <div class="widget-shadow"></div>
+                <div class="widget-halo"></div>
+                <div class="widget">
+                  <div class="emoji">🙂</div>
+                </div>
+              </div>
+
+              <div class="bubble" style="left: 26px; top: 110px;">
+                <strong>常驻状态</strong>
+                轻微浮动、柔和贴地阴影、底部右侧停驻。
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="screen-title">
+              <span class="num">01</span>
+              <div>
+                <h2>默认常驻状态</h2>
+                <p>目标是让 Deskemoji 在桌面右下角“像真的在桌面上”，不是像一张悬空贴图。</p>
+              </div>
+            </div>
+
+            <div class="zones">
+              <div class="zone">
+                <strong><span class="pin">01.1</span>emoji 本体占比</strong>
+                <p>emoji 建议比当前更“填满”窗口一点，减少透明留白，让真实视觉体积更接近系统标准表情。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">01.2</span>窗口贴桌感</strong>
+                <p>通过落地阴影、轻微光晕和更低的重心，让它看起来像停在桌面边缘，而不是漂在空中。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">01.3</span>待机动态幅度</strong>
+                <p>保留很小的浮动和呼吸感，但不要让 idle 动画强到影响“标准 emoji”识别。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">01.4</span>桌面融合层</strong>
+                <p>可选增加 hover 时的弱高光或极轻边缘辉光，只在用户靠近时出现，平时尽量隐形。</p>
+              </div>
+            </div>
+
+            <div class="note">这一页主要确认：整体是更偏“真实系统 emoji 停在桌面上”，还是还需要一点更明显的桌宠存在感。</div>
+          </div>
+        </article>
+
+        <article class="screen" id="screen-02">
+          <div class="mock">
+            <div class="desktop">
+              <div class="menu-bar">
+                <span>Interaction preview</span>
+                <span>Eyes / Tap / Micro reaction</span>
+              </div>
+
+              <div class="comparison">
+                <div class="mini-scene">
+                  <div class="mini-label">靠近鼠标</div>
+                  <div class="mini-bubble">看向鼠标，但眼神移动幅度很小</div>
+                  <div class="cursor" style="left: 42px; top: 86px;"></div>
+                  <div class="mini-widget" style="right: 20px; bottom: 20px;">
+                    <div class="emoji">🙂</div>
+                    <div class="eyes look-right">
+                      <div class="eye"><div class="pupil"></div></div>
+                      <div class="eye"><div class="pupil"></div></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mini-scene">
+                  <div class="mini-label">点击反馈</div>
+                  <div class="mini-bubble">轻压缩 + 回弹，不改变 emoji 五官</div>
+                  <div class="mini-widget tap">
+                    <div class="emoji">🙂</div>
+                  </div>
+                </div>
+
+                <div class="mini-scene">
+                  <div class="mini-label">小表情层</div>
+                  <div class="mini-bubble">可加汗滴、爱心、问号、zzz 这类外围表情</div>
+                  <div class="mini-widget" style="right: 18px; bottom: 18px;">
+                    <div class="emoji">🤔</div>
+                  </div>
+                  <div style="position:absolute; right: 30px; top: 54px; font-size: 24px;">❔</div>
+                  <div style="position:absolute; right: 70px; top: 94px; font-size: 22px;">✨</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="screen-title">
+              <span class="num">02</span>
+              <div>
+                <h2>鼠标互动与小表情</h2>
+                <p>核心原则是“互动围着 emoji 发生”，尽量不重绘五官本身，用外围层来做活泼感。</p>
+              </div>
+            </div>
+
+            <div class="zones">
+              <div class="zone">
+                <strong><span class="pin">02.1</span>眼睛跟随鼠标</strong>
+                <p>提议只做很小幅度瞳孔偏移，或者在部分状态叠一层“白眼+瞳孔”交互层；平时透明，靠近鼠标才出现。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">02.2</span>点击与拖拽反馈</strong>
+                <p>点击时做轻压缩和回弹，拖动时做一点延迟跟随与落点缓冲，让它更像被拎起来的小挂件。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">02.3</span>小表情粒子</strong>
+                <p>不改 emoji 本体，只在外圈短暂出现汗滴、星星、问号、zzz、感叹号等，强化状态表达。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">02.4</span>互动强度控制</strong>
+                <p>建议做“安静 / 标准 / 活泼”三级互动强度，避免日常办公时一直抢戏。</p>
+              </div>
+            </div>
+
+            <div class="note">这一页主要确认：你说的“互动感”是否可以接受为“外围层活起来”，而不是直接改标准 emoji 的脸。</div>
+          </div>
+        </article>
+
+        <article class="screen" id="screen-03">
+          <div class="mock">
+            <div class="desktop">
+              <div class="menu-bar">
+                <span>System load alert</span>
+                <span>Escalates only when needed</span>
+              </div>
+
+              <div class="bubble" style="left: 28px; top: 90px;">
+                <strong>CPU 告警</strong>
+                <span class="stat">● CPU 100%</span>
+                <div class="chip-row">
+                  <span class="chip">短句提示</span>
+                  <span class="chip">3-5 秒自动淡出</span>
+                  <span class="chip">点击可展开详情</span>
+                </div>
+              </div>
+
+              <div class="widget-wrap" style="right: 24px; bottom: 28px;">
+                <div class="widget-shadow"></div>
+                <div class="widget" style="background:
+                  radial-gradient(circle at 30% 22%, rgba(255,255,255,0.72), rgba(255,255,255,0) 28%),
+                  radial-gradient(circle at 50% 42%, #ffd162, #ef9d23);">
+                  <div class="emoji">🥵</div>
+                </div>
+              </div>
+
+              <div class="meter" style="position:absolute; left: 24px; right: 24px; bottom: 28px;">
+                <div class="meter-row">
+                  <span>资源摘要</span>
+                  <strong style="color:#a53d3d;">高压力状态</strong>
+                </div>
+                <div class="meter-row">
+                  <span>CPU</span>
+                  <span>100%</span>
+                </div>
+                <div class="bar"><div class="fill" style="width:100%;"></div></div>
+                <div class="meter-row" style="margin-top:12px;">
+                  <span>Memory</span>
+                  <span>92%</span>
+                </div>
+                <div class="bar"><div class="fill" style="width:92%;"></div></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="screen-title">
+              <span class="num">03</span>
+              <div>
+                <h2>资源告警与对话框</h2>
+                <p>高负载时不只是换表情，还能“说一句话”。问题是这个表达要多明显，才既有用又不打扰。</p>
+              </div>
+            </div>
+
+            <div class="zones">
+              <div class="zone">
+                <strong><span class="pin">03.1</span>气泡表达层级</strong>
+                <p>默认建议先用小气泡，比如“CPU 100%”；只有持续高压时，才出现更明显的扩展提示或摘要条。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">03.2</span>信息密度</strong>
+                <p>第一层只显示最关键数字，避免把桌宠做成监控面板；详细信息可通过点击或右键展开。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">03.3</span>情绪 + 数据绑定</strong>
+                <p>emoji 表情、外圈汗滴/火花、气泡文字和颜色应当联动，比如热脸 + 红色告警 + “CPU 100%”。</p>
+              </div>
+              <div class="zone">
+                <strong><span class="pin">03.4</span>打扰度策略</strong>
+                <p>建议所有提示都自动淡出，除非用户 hover 或点击；否则长期占桌面会显得过于喧闹。</p>
+              </div>
+            </div>
+
+            <div class="note">这一页主要确认：你想要的是“可爱的桌宠式告警”，还是更偏“轻量系统提示 + 情绪反馈”的混合方案。</div>
+          </div>
+        </article>
+      </section>
+
+      <section class="footer-note">
+        当前这版的推荐方向是：保持标准 emoji 资源做主体，互动感主要来自外围层和时机控制。这样最容易同时满足你要的 `b + c`，也给后面加眼睛跟随、资源气泡、小表情动画留下空间。
+      </section>
+    </main>
+  </div>
+</body>
+</html>

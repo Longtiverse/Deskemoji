@@ -1,5 +1,13 @@
 /target/
+/worktrees/
+.superpowers/
+.review-data/
+__pycache__/
 *.exe
 *.7z
 *.zip
 Cargo.lock
+extract_*.py
+docs/temp/
+/mingw64/
+/dist/

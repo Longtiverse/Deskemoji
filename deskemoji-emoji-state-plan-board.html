@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deskemoji Emoji 状态系统 — 交互式决策板</title>
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --surface: #151b2b;
+            --surface-2: #1e2538;
+            --surface-3: #283049;
+            --text: #f0f4f8;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-2: #818cf8;
+            --accent-3: #f472b6;
+            --success: #4ade80;
+            --warning: #facc15;
+            --error: #f87171;
+            --border: #2d3655;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px 80px;
+        }
+        header {
+            text-align: center;
+            padding: 50px 20px;
+            background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 30px;
+        }
+        header h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(90deg, var(--accent-3), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        header p { color: var(--text-muted); font-size: 1rem; }
+
+        .status-bar {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 18px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .status-bar .indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        .status-bar .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--success); animation: pulse 2s infinite;
+        }
+        .status-bar .dot.offline { background: var(--error); animation: none; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+        .phase-section { margin-bottom: 36px; }
+        .phase-header {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 18px; padding-bottom: 10px;
+            border-bottom: 2px solid var(--border);
+        }
+        .phase-badge {
+            padding: 4px 14px; border-radius: 20px;
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+        }
+        .badge-high { background: var(--error); color: #fff; }
+        .badge-mid { background: var(--warning); color: #000; }
+        .badge-low { background: var(--accent-2); color: #fff; }
+        .phase-title { font-size: 1.25rem; font-weight: 600; }
+        .phase-sub { margin-left: auto; color: var(--text-muted); font-size: 0.9rem; }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 22px;
+            margin-bottom: 14px;
+            transition: border-color 0.2s;
+        }
+        .card:hover { border-color: var(--surface-3); }
+        .card.approved { border-left: 4px solid var(--success); }
+        .card.rejected { border-left: 4px solid var(--error); opacity: 0.85; }
+        .card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+        .emoji-icon { font-size: 2rem; line-height: 1; }
+        .card-title { font-size: 1.15rem; font-weight: 600; flex: 1; }
+        .card-desc { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 14px; padding-left: 48px; }
+        .card-desc ul { margin: 8px 0 0 18px; }
+        .card-desc li { margin-bottom: 4px; }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px; margin-bottom: 14px; padding-left: 48px;
+        }
+        .control-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
+        .control-group select, .control-group input[type="text"] {
+            width: 100%; padding: 8px 10px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+            font-size: 0.9rem;
+        }
+        .control-group input[type="range"] { width: 100%; accent-color: var(--accent-3); }
+        .range-val { font-size: 0.8rem; color: var(--accent-3); margin-left: 6px; }
+
+        .toggle-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .toggle-btn {
+            padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--surface-2); color: var(--text-muted);
+            cursor: pointer; font-size: 0.85rem; user-select: none; transition: all 0.15s;
+        }
+        .toggle-btn.active { background: var(--success); border-color: var(--success); color: #000; font-weight: 600; }
+        .toggle-btn.rej.active { background: var(--error); border-color: var(--error); color: #fff; }
+
+        .comment-box {
+            width: 100%; min-height: 64px; padding: 10px 12px; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+            font-size: 0.95rem; resize: vertical; font-family: inherit;
+            margin-left: 48px; width: calc(100% - 48px);
+        }
+        .comment-box::placeholder { color: #64748b; }
+        .comment-box.saving { border-color: var(--warning); }
+        .comment-box.saved { border-color: var(--success); }
+
+        @media (max-width: 900px) {
+            .controls, .card-desc, .comment-box { padding-left: 0; margin-left: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Deskemoji Emoji 状态系统</h1>
+        <p>下一步开发计划 — 所有输入自动持久化</p>
+    </header>
+
+    <div class="container">
+        <div class="status-bar">
+            <div class="indicator">
+                <span class="dot" id="connDot"></span>
+                <span id="connText">正在连接本地保存服务...</span>
+            </div>
+            <div style="font-size:0.85rem;color:var(--text-muted);">数据实时保存至 <code>.review-data/deskemoji-emoji-state-plan.json</code></div>
+        </div>
+
+        <div class="intro-box" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:28px;color:var(--text-muted);">
+            <strong>基于你上一轮决策的上下文：</strong><br>
+            技术债全部纳入计划（清理死代码、拆分 renderer、CI/CD、设置窗口、Magic Numbers 常量化）+ 产品侧确定做"游戏勿扰模式"和"AI 人格化（预设对话树，保留 API 扩展性）"。
+        </div>
+
+        <!-- 高优：缺失的自动状态 -->
+        <div class="phase-section" data-phase="high">
+            <div class="phase-header">
+                <span class="phase-badge badge-high">高优</span>
+                <span class="phase-title">缺失的自动触发机制</span>
+                <span class="phase-sub">Review Board 最大缺口</span>
+            </div>
+
+            <div class="card" data-id="s1" data-title="Sad 自动触发规则">
+                <div class="card-header">
+                    <span class="emoji-icon">😢</span>
+                    <div class="card-title">Sad 自动触发规则设计</div>
+                </div>
+                <div class="card-desc">
+                    当前 Sad 仅支持手动选择，缺乏自动触发条件。这导致用户在真正遇到低谷（如系统崩溃、蓝屏、长时间无响应）时，Emoji 不会自然表达共情。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 设计自动触发</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持纯手动</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>触发条件倾向</label>
+                        <select data-key="trigger">
+                            <option value="">请选择...</option>
+                            <option value="bsod">检测到系统蓝屏/崩溃事件后恢复</option>
+                            <option value="app_crash">检测到常用应用频繁崩溃</option>
+                            <option value="network_offline">网络长时间断开（超过阈值）</option>
+                            <option value="low_battery">笔记本电量低于 20%</option>
+                            <option value="manual_only">不自动触发，仅手动</option>
+                            <option value="other">其他（备注说明）</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>优先级定位</label>
+                        <select data-key="priority">
+                            <option value="">请选择...</option>
+                            <option value="high">高优先级（仅次于 Hot/Mindblown）</option>
+                            <option value="mid">中等优先级（与 Sleepy 同级）</option>
+                            <option value="low">低优先级（可被多数状态覆盖）</option>
+                            <option value="contextual">仅作为上下文彩蛋触发</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如触发阈值、触发后持续时长、是否适合经常自动出现..."></textarea>
+            </div>
+
+            <div class="card" data-id="s2" data-title="Angry 自动触发规则">
+                <div class="card-header">
+                    <span class="emoji-icon">😠</span>
+                    <div class="card-title">Angry 自动触发规则设计</div>
+                </div>
+                <div class="card-desc">
+                    当前 Angry 也仅支持手动。可以考虑在系统出现"被侵犯"或"过度负载"的场景下自动表达愤怒，比如风扇狂转、温度爆表、后台流氓软件占用资源。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 设计自动触发</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持纯手动</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>触发条件倾向</label>
+                        <select data-key="trigger">
+                            <option value="">请选择...</option>
+                            <option value="cpu_temp">CPU 温度超过危险阈值</option>
+                            <option value="fan_noise">风扇转速异常高（如果可获取）</option>
+                            <option value="rogue_process">检测到有进程疯狂占用资源</option>
+                            <option value="update_forced">系统强制更新/重启倒计时</option>
+                            <option value="manual_only">不自动触发，仅手动</option>
+                            <option value="other">其他（备注说明）</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>与 Hot 的关系</label>
+                        <select data-key="relation">
+                            <option value="">请选择...</option>
+                            <option value="replace_hot">温度爆表时 Angry 替代 Hot</option>
+                            <option value="hot_then_angry">先 Hot，持续高温后升级为 Angry</option>
+                            <option value="separate_trigger">与 Hot 完全独立触发条件</option>
+                            <option value="manual_fallback">仅手动触发，不与 Hot 竞争</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如 Angry 和 Hot 的区分度、动画强度是否需要升级..."></textarea>
+            </div>
+        </div>
+
+        <!-- 中优：现有状态优化 -->
+        <div class="phase-section" data-phase="mid">
+            <div class="phase-header">
+                <span class="phase-badge badge-mid">中优</span>
+                <span class="phase-title">现有状态规则优化</span>
+                <span class="phase-sub">提升系统灵活性与准确性</span>
+            </div>
+
+            <div class="card" data-id="s3" data-title="Thinking 时段硬编码问题">
+                <div class="card-header">
+                    <span class="emoji-icon">🤔</span>
+                    <div class="card-title">Thinking 时段硬编码问题</div>
+                </div>
+                <div class="card-desc">
+                    当前 Thinking 固定在 10:00–17:59 触发，但现代工作模式多样（夜班、弹性工作、跨国时区），这个硬编码会让很多用户觉得"它不懂我"。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 改造规则</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持现状</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>改造方向</label>
+                        <select data-key="direction">
+                            <option value="">请选择...</option>
+                            <option value="user_configurable">允许用户自定义工作时段</option>
+                            <option value="detect_activity">基于键盘/鼠标活跃时段智能推断"工作时段"</option>
+                            <option value="both">结合：先检测习惯，再允许微调</option>
+                            <option value="remove_time">完全移除时间限制，Thinking 作为"活跃使用"的默认状态</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>预期复杂度</label>
+                        <select data-key="complexity">
+                            <option value="">请选择...</option>
+                            <option value="low">低（改配置即可）</option>
+                            <option value="mid">中（需要记录历史活跃数据）</option>
+                            <option value="high">高（需要机器学习/时序分析）</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如默认工作时段、是否需要学习期、隐私顾虑..."></textarea>
+            </div>
+
+            <div class="card" data-id="s4" data-title="Goodnight vs Sleepy 语义重叠">
+                <div class="card-header">
+                    <span class="emoji-icon">😌 😴</span>
+                    <div class="card-title">Goodnight vs Sleepy 语义重叠</div>
+                </div>
+                <div class="card-desc">
+                    Goodnight（深夜时段）和 Sleepy（系统空闲）都表达"困倦/休息"，用户可能困惑为什么 23 点还在操作时看到 Goodnight，而空闲一下午却看到 Sleepy。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 重新设计区分</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持现状</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>区分策略</label>
+                        <select data-key="strategy">
+                            <option value="">请选择...</option>
+                            <option value="merge">合并为一个状态（Rest/Tired）</option>
+                            <option value="redefine_goodnight">重新定义 Goodnight 为"深夜陪伴"（温馨而非困倦）</option>
+                            <option value="redefine_sleepy">重新定义 Sleepy 为"系统休眠"（电脑要睡了，不是人）</option>
+                            <option value="add_transition">增加过渡：深夜+空闲 → Sleepy，深夜+活跃 → Goodnight</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>是否需要新增状态来填补空缺</label>
+                        <select data-key="newstate">
+                            <option value="">请选择...</option>
+                            <option value="yes">是（比如早晨咖啡状态、午休状态）</option>
+                            <option value="no">否，先优化现有 8 个</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如你对这两个表情的理解差异、希望看到什么样的场景映射..."></textarea>
+            </div>
+
+            <div class="card" data-id="s5" data-title="状态优先级可配置">
+                <div class="card-header">
+                    <span class="emoji-icon">⚖️</span>
+                    <div class="card-title">状态优先级可配置</div>
+                </div>
+                <div class="card-desc">
+                    当前优先级是写死的：Hot > Mindblown > Sleepy > Goodnight > Thinking > Happy。不同用户的使用场景不同，比如有人更在意内存而不是 CPU，有人希望深夜时段优先级最高。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 支持自定义</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持固定</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>配置粒度</label>
+                        <select data-key="granularity">
+                            <option value="">请选择...</option>
+                            <option value="full_dragdrop">完全自由拖拽排序</option>
+                            <option value="preset_profiles">提供几种预设优先级方案（工作狂/养生党/游戏玩家）</option>
+                            <option value="simple_swap">只允许两两交换相邻优先级</option>
+                            <option value="weight_based">基于权重数值而非严格排序</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>是否允许禁用某些自动状态</label>
+                        <select data-key="disable">
+                            <option value="">请选择...</option>
+                            <option value="yes">是，用户可开关任意自动状态</option>
+                            <option value="no">否，只能调整优先级</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如你最想调整哪个状态的优先级、担心用户搞乱配置吗..."></textarea>
+            </div>
+        </div>
+
+        <!-- 中优：系统能力扩展 -->
+        <div class="phase-section" data-phase="mid2">
+            <div class="phase-header">
+                <span class="phase-badge badge-mid">中优</span>
+                <span class="phase-title">系统能力扩展</span>
+                <span class="phase-sub">气泡、新状态、AI 联动</span>
+            </div>
+
+            <div class="card" data-id="s6" data-title="气泡系统扩展">
+                <div class="card-header">
+                    <span class="emoji-icon">💬</span>
+                    <div class="card-title">气泡系统扩展</div>
+                </div>
+                <div class="card-desc">
+                    目前只有 Hot 和 Mindblown 会显示气泡（CPU%/MEM%）。其他状态完全无法通过气泡传递更多信息，比如 Sleepy 可以显示"已空闲 12 分钟"，Thinking 可以显示"专注中"。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 扩展气泡</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持仅两个</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>扩展策略</label>
+                        <select data-key="strategy">
+                            <option value="">请选择...</option>
+                            <option value="all_states">所有状态都支持气泡（内容按状态自动生成）</option>
+                            <option value="selected_states">只给 Sleepy、Thinking 等部分状态加</option>
+                            <option value="ai_generated">气泡内容由 AI/预设对话生成（结合人格化）</option>
+                            <option value="user_custom">允许用户自定义每个状态的气泡文案</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>是否允许永久关闭气泡</label>
+                        <select data-key="closable">
+                            <option value="">请选择...</option>
+                            <option value="global_switch">提供一个全局气泡开关</option>
+                            <option value="per_state">按状态独立开关气泡</option>
+                            <option value="both">全局 + 按状态双重控制</option>
+                            <option value="no">不允许关闭，这是核心体验</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如你最想看到哪个状态的气泡内容、气泡会不会太打扰..."></textarea>
+            </div>
+
+            <div class="card" data-id="s7" data-title="引入新状态">
+                <div class="card-header">
+                    <span class="emoji-icon">✨</span>
+                    <div class="card-title">引入新状态</div>
+                </div>
+                <div class="card-desc">
+                    8 个状态覆盖了基础情绪，但缺少一些现代场景：深度专注（Flow）、焦虑（Anxious）、庆祝（Celebrate）、生病（Sick）、无聊（Bored）。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 引入新状态</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持 8 个</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>最优先新增的状态</label>
+                        <select data-key="newstate">
+                            <option value="">请选择...</option>
+                            <option value="flow">🧘 Flow / 专注（长时间深度工作）</option>
+                            <option value="anxious">😰 Anxious / 焦虑（多任务切换频繁）</option>
+                            <option value="celebrate">🎉 Celebrate / 庆祝（完成大任务/周末）</option>
+                            <option value="sick">🤒 Sick / 生病（电脑中毒/异常行为）</option>
+                            <option value="bored">😐 Bored / 无聊（反复切换应用）</option>
+                            <option value="love">🥰 Love / 喜爱（用户高频互动后的正反馈）</option>
+                            <option value="other">其他（备注说明）</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>新增状态的数量控制</label>
+                        <select data-key="count">
+                            <option value="">请选择...</option>
+                            <option value="1">只增加 1 个最必要的</option>
+                            <option value="2-3">增加 2-3 个</option>
+                            <option value="unlimited">不设限，持续扩展情绪库</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如你最想要哪个新表情、它的触发条件是什么..."></textarea>
+            </div>
+
+            <div class="card" data-id="s8" data-title="AI 人格化与状态联动">
+                <div class="card-header">
+                    <span class="emoji-icon">🤖</span>
+                    <div class="card-title">AI 人格化与状态联动</div>
+                </div>
+                <div class="card-desc">
+                    你已决定中期做"AI 人格化升级"且采用预设对话树。这意味着每个状态切换时，Emoji 可以说出与该状态匹配的人格化台词，而不是默默变表情。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 深度联动</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 仅表情变化</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>台词触发时机</label>
+                        <select data-key="trigger">
+                            <option value="">请选择...</option>
+                            <option value="on_enter">每次进入状态时触发</option>
+                            <option value="random_idle">在 Idle 时随机闲聊（与当前状态相关）</option>
+                            <option value="threshold_breach">仅在突破阈值时触发（如 CPU 刚爆表）</option>
+                            <option value="user_click">用户点击 Emoji 时对话</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>台词呈现形式</label>
+                        <select data-key="display">
+                            <option value="">请选择...</option>
+                            <option value="bubble_text">气泡内显示文字</option>
+                            <option value="tooltip">Tooltip 样式浮层</option>
+                            <option value="sidebar">侧边小日志面板</option>
+                            <option value="tts">文字 + 可选语音播报（TTS）</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如台词风格、频率控制、是否允许关闭对话..."></textarea>
+            </div>
+        </div>
+
+        <!-- 低优：视觉与动画细化 -->
+        <div class="phase-section" data-phase="low">
+            <div class="phase-header">
+                <span class="phase-badge badge-low">低优</span>
+                <span class="phase-title">视觉与动画细化</span>
+                <span class="phase-sub">与技术债拆分 renderer 配合</span>
+            </div>
+
+            < <div class="card" data-id="s9" data-title="状态切换过渡动画升级">
+                <div class="card-header">
+                    <span class="emoji-icon">🎬</span>
+                    <div class="card-title">状态切换过渡动画升级</div>
+                </div>
+                <div class="card-desc">
+                    当前切换是 180ms 的淡入淡出。如果能根据"源状态→目标状态"的情绪差异做不同的过渡（比如 Happy→Sad 是下沉溶解，Hot→Angry 是红温闪烁），会极大提升情感表达力。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 设计状态间过渡</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持统一淡入淡出</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>实现复杂度预估</label>
+                        <select data-key="complexity">
+                            <option value="">请选择...</option>
+                            <option value="simple">简单：只有特定配对有特殊过渡</option>
+                            <option value="matrix">中等：8×8 状态切换矩阵，每对独立动画</option>
+                            <option value="shader">复杂：引入 shader/粒子效果（偏离当前技术栈）</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如最期待哪一对状态之间的过渡效果..."></textarea>
+            </div>
+
+            <div class="card" data-id="s10" data-title="状态音效（SFX）">
+                <div class="card-header">
+                    <span class="emoji-icon">🔊</span>
+                    <div class="card-title">状态音效（SFX）</div>
+                </div>
+                <div class="card-desc">
+                    每个状态切换或进入时播放轻量级音效（如 Happy 是清脆铃音，Angry 是低沉震动，Sleepy 是打哈欠）。Rust + Windows 环境下可以用轻量 wave 文件或系统 beep。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 加入音效</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持静音</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>音效风格</label>
+                        <select data-key="style">
+                            <option value="">请选择...</option>
+                            <option value="cute">可爱卡通风格</option>
+                            <option value="minimal">极简提示音</option>
+                            <option value="system">Windows 系统音效变体</option>
+                            <option value="asmr">ASMR 风格轻音</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>触发范围</label>
+                        <select data-key="scope">
+                            <option value="">请选择...</option>
+                            <option value="all_transitions">所有状态切换都播放</option>
+                            <option value="auto_only">仅自动状态切换播放</option>
+                            <option value="manual_only">仅手动选择时播放</option>
+                            <option value="threshold_only">仅突破阈值时播放（Hot/Mindblown）</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如音量控制、是否允许单独关闭、办公室场景顾虑..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8765';
+        const FILENAME = 'deskemoji-emoji-state-plan';
+        let savedData = {};
+        let isOnline = false;
+
+        // Load existing data
+        async function loadData() {
+            try {
+                const res = await fetch(`${API_BASE}/api/load?filename=${FILENAME}`);
+                if (res.ok) {
+                    savedData = await res.json();
+                    isOnline = true;
+                    updateConnectionUI(true);
+                    populateUI();
+                } else {
+                    throw new Error('Load failed');
+                }
+            } catch (e) {
+                isOnline = false;
+                updateConnectionUI(false);
+            }
+        }
+
+        function updateConnectionUI(online) {
+            const dot = document.getElementById('connDot');
+            const text = document.getElementById('connText');
+            if (online) {
+                dot.classList.remove('offline');
+                text.textContent = '本地保存服务已连接，输入自动持久化';
+            } else {
+                dot.classList.add('offline');
+                text.textContent = '本地保存服务未连接（请运行 python review-server.py）';
+            }
+        }
+
+        function populateUI() {
+            document.querySelectorAll('.card').forEach(card => {
+                const id = card.dataset.id;
+                const data = savedData[id] || {};
+
+                // Decision buttons
+                if (data.decision) {
+                    const btns = card.querySelectorAll('.toggle-btn');
+                    btns.forEach(b => {
+                        if (b.dataset.val === data.decision) {
+                            b.classList.add('active');
+                            if (data.decision === 'approved') card.classList.add('approved');
+                            if (data.decision === 'rejected') card.classList.add('rejected');
+                        } else {
+                            b.classList.remove('active');
+                        }
+                    });
+                }
+
+                // Selects
+                card.querySelectorAll('select').forEach(sel => {
+                    const key = sel.dataset.key;
+                    if (data[key]) sel.value = data[key];
+                });
+
+                // Textareas
+                const ta = card.querySelector('.comment-box');
+                if (ta && data.note) ta.value = data.note;
+            });
+        }
+
+        async function saveCard(cardId) {
+            if (!isOnline) return;
+            const card = document.querySelector(`.card[data-id="${cardId}"]`);
+            const data = { id: cardId };
+
+            const activeBtn = card.querySelector('.toggle-btn.active');
+            if (activeBtn) data.decision = activeBtn.dataset.val;
+
+            card.querySelectorAll('select').forEach(sel => {
+                if (sel.value) data[sel.dataset.key] = sel.value;
+            });
+
+            const ta = card.querySelector('.comment-box');
+            if (ta && ta.value.trim()) data.note = ta.value.trim();
+
+            savedData[cardId] = data;
+
+            try {
+                await fetch(`${API_BASE}/api/save`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: FILENAME, data: savedData })
+                });
+            } catch (e) {
+                console.error('Save failed', e);
+            }
+        }
+
+        // Event delegation
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const row = btn.closest('.toggle-row');
+                row.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const card = btn.closest('.card');
+                card.classList.remove('approved', 'rejected');
+                if (btn.dataset.val === 'approved') card.classList.add('approved');
+                if (btn.dataset.val === 'rejected') card.classList.add('rejected');
+                await saveCard(card.dataset.id);
+            });
+        });
+
+        document.querySelectorAll('select').forEach(sel => {
+            sel.addEventListener('change', async () => {
+                await saveCard(sel.closest('.card').dataset.id);
+            });
+        });
+
+        document.querySelectorAll('.comment-box').forEach(ta => {
+            let timeout;
+            ta.addEventListener('input', async () => {
+                clearTimeout(timeout);
+                ta.classList.add('saving');
+                timeout = setTimeout(async () => {
+                    await saveCard(ta.closest('.card').dataset.id);
+                    ta.classList.remove('saving');
+                    ta.classList.add('saved');
+                    setTimeout(() => ta.classList.remove('saved'), 600);
+                }, 400);
+            });
+        });
+
+        // Initialize
+        loadData();
+        setInterval(loadData, 5000); // periodic heartbeat
+    </script>
+</body>
+</html>

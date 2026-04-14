@@ -1,104 +1,187 @@
+#![windows_subsystem = "windows"]
+
 mod config;
-mod emoji;
 mod monitor;
-mod renderer;
 mod settings;
 
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 use tray_icon::{Icon, TrayIconBuilder};
-use winit::platform::windows::WindowBuilderExtWindows;
+use winit::platform::windows::{WindowBuilderExtWindows, WindowExtWindows};
+use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{ElementState, Event, MouseButton, WindowEvent},
+    event::{DeviceEvent, ElementState, Event, MouseButton, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder, WindowLevel},
 };
 
 use config::Config;
-use monitor::Monitor;
-use renderer::Renderer;
+use deskemoji::app_hang_detector::AppHangDetector;
+use deskemoji::emoji_assets::{EmojiAssets, EmojiId};
+use deskemoji::input_monitor::{InputLevel, InputMonitor};
+use deskemoji::renderer::{
+    compute_closed_eye_response, compute_idle_transform, compute_state_accent_transform,
+    BubbleOverlay, EmojiTransform, GazeDirection, RenderLayer, Renderer,
+};
+use monitor::{Monitor, ResourceState};
 use settings::Settings;
 
-const WINDOW_SIZE: u32 = 120;
-const EMOJI_RADIUS: f32 = 45.0;
+const WINDOW_WIDTH: u32 = 220;
+const WINDOW_HEIGHT: u32 = 220;
+const GAZE_CENTER_X_RATIO: f32 = 0.50;
+const GAZE_CENTER_Y_RATIO: f32 = 0.66;
 const WINDOW_MARGIN_RIGHT: i32 = 20;
 const WINDOW_MARGIN_BOTTOM: i32 = 60;
 const BOUNCE_SPEED: f32 = 5.0;
 const BOUNCE_DECAY: f32 = 0.65;
+const TRANSITION_DURATION: Duration = Duration::from_millis(180);
 
-const EMOJIS: &[(&str, &str)] = &[
-    ("\u{1F642}", "开心"),
-    ("\u{1F622}", "难过"),
-    ("\u{1F621}", "生气"),
-    ("\u{1F634}", "困倦"),
-    ("\u{1F914}", "思考"),
-    ("\u{1F975}", "热"),
-    ("\u{1F480}", "崩溃"),
-    ("\u{1F319}", "晚安"),
-];
+const APPROVED_EMOJIS: [EmojiId; 8] = EmojiId::all();
 
 struct App {
     window: Rc<Window>,
     renderer: Renderer,
+    assets: EmojiAssets,
     monitor: Monitor,
+    input_monitor: InputMonitor,
+    hang_detector: AppHangDetector,
     config: Config,
-    current_emoji_idx: usize,
+    current_emoji: EmojiId,
+    manual_emoji: Option<EmojiId>,
+    previous_emoji: Option<EmojiId>,
+    transition_started_at: Option<Instant>,
     auto_mode: bool,
-    manual_emoji: Option<usize>,
     bounce_y: f32,
     bounce_vel: f32,
     is_bouncing: bool,
-    breath_phase: f32,
     is_hovering: bool,
-    screen_mouse_x: f32,
-    screen_mouse_y: f32,
-    window_x: f32,
-    window_y: f32,
-    eye_x: f32,
-    eye_y: f32,
+    animation_started_at: Instant,
     last_update: Instant,
     last_activity: Instant,
     last_click_time: Instant,
+    last_emoji_change: Instant,
+    wake_up_angry_until: Option<Instant>,
+    wake_up_click_count: u32,
 }
 
 impl App {
     fn new(window: Rc<Window>) -> Self {
         let renderer = Renderer::new(window.clone());
-        let monitor = Monitor::new();
+        let assets = EmojiAssets::load_default()
+            .unwrap_or_else(|err| panic!("failed to load emoji assets: {err}"));
         let config = Config::load();
-        let pos = window
-            .outer_position()
-            .unwrap_or(PhysicalPosition::new(0, 0));
+        let monitor = Monitor::new().with_thresholds(
+            config.hot_cpu_threshold,
+            config.hot_memory_threshold,
+            config.mindblown_cpu_threshold,
+            config.mindblown_memory_threshold,
+        );
+        let auto_mode = config.auto_mode;
 
-        Self {
+        let mut app = Self {
             window,
             renderer,
+            assets,
             monitor,
+            input_monitor: InputMonitor::new(),
+            hang_detector: AppHangDetector::new(),
             config,
-            current_emoji_idx: 0,
-            auto_mode: true,
+            current_emoji: EmojiId::Happy,
             manual_emoji: None,
+            previous_emoji: None,
+            transition_started_at: None,
+            auto_mode,
             bounce_y: 0.0,
             bounce_vel: 0.0,
             is_bouncing: false,
-            breath_phase: 0.0,
             is_hovering: false,
-            screen_mouse_x: 0.0,
-            screen_mouse_y: 0.0,
-            window_x: pos.x as f32 + 60.0,
-            window_y: pos.y as f32 + 60.0,
-            eye_x: 0.0,
-            eye_y: 0.0,
+            animation_started_at: Instant::now(),
             last_update: Instant::now(),
             last_activity: Instant::now(),
             last_click_time: Instant::now(),
+            last_emoji_change: Instant::now() - Duration::from_secs(10),
+            wake_up_angry_until: None,
+            wake_up_click_count: 0,
+        };
+
+        if app.auto_mode {
+            let initial = app.resolve_auto_emoji();
+            app.set_current_emoji(initial, false, true);
+        }
+
+        app
+    }
+
+    fn resolve_auto_emoji(&mut self) -> EmojiId {
+        // 被吵醒的 Angry 优先级最高（强制状态）
+        if let Some(until) = self.wake_up_angry_until {
+            if Instant::now() < until {
+                return EmojiId::Angry;
+            }
+            self.wake_up_angry_until = None;
+            self.wake_up_click_count = 0;
+        }
+
+        // 优先级 1: Hot / Mindblown
+        match self.monitor.get_resource_state() {
+            ResourceState::Mindblown => return EmojiId::Mindblown,
+            ResourceState::Hot => return EmojiId::Hot,
+            _ => {}
+        }
+
+        // 优先级 2: Sad (前台窗口未响应)
+        if self.hang_detector.is_hung() {
+            return EmojiId::Sad;
+        }
+
+        // 优先级 3: Angry (高频输入)
+        let input_level = self.input_monitor.current_level();
+        if input_level == InputLevel::High {
+            return EmojiId::Angry;
+        }
+
+        let info = self.monitor.get_info();
+
+        // 优先级 4: Sleepy (系统空闲)
+        if info.is_idle {
+            return EmojiId::Sleepy;
+        }
+
+        // 优先级 5: Goodnight (深夜时段)
+        if info.hour >= 22 || info.hour <= 5 {
+            return EmojiId::Goodnight;
+        }
+
+        // 优先级 6: Thinking / Happy
+        match input_level {
+            InputLevel::Stable => EmojiId::Thinking,
+            InputLevel::Normal | InputLevel::High => EmojiId::Happy,
         }
     }
 
-    fn current_emoji_char(&self) -> char {
-        let idx = self.manual_emoji.unwrap_or(self.current_emoji_idx);
-        EMOJIS[idx].0.chars().next().unwrap_or('\u{1F642}')
+    fn set_current_emoji(&mut self, emoji: EmojiId, animate: bool, force: bool) {
+        if emoji == self.current_emoji {
+            return;
+        }
+
+        if !force {
+            let min_interval = Duration::from_secs(self.config.state_switch_interval_secs);
+            if self.last_emoji_change.elapsed() < min_interval {
+                return;
+            }
+        }
+
+        if animate {
+            self.previous_emoji = Some(self.current_emoji);
+            self.transition_started_at = Some(Instant::now());
+        } else {
+            self.previous_emoji = None;
+            self.transition_started_at = None;
+        }
+
+        self.current_emoji = emoji;
+        self.last_emoji_change = Instant::now();
     }
 
     fn trigger_bounce(&mut self) {
@@ -108,22 +191,27 @@ impl App {
         }
     }
 
-    fn update_eye(&mut self) {
-        let dx = self.screen_mouse_x - self.window_x;
-        let dy = self.screen_mouse_y - self.window_y;
-        let dist = (dx * dx + dy * dy).sqrt();
-
-        if dist > 10.0 {
-            let max_offset = 10.0;
-            let strength = (dist / 200.0).min(1.0);
-            let target_x = (dx / dist) * strength * max_offset;
-            let target_y = (dy / dist) * strength * max_offset;
-            self.eye_x += (target_x - self.eye_x) * 0.15;
-            self.eye_y += (target_y - self.eye_y) * 0.15;
-        } else {
-            self.eye_x *= 0.9;
-            self.eye_y *= 0.9;
+    fn trigger_shake(&mut self, intensity: f32) {
+        if !self.is_bouncing {
+            self.is_bouncing = true;
+            self.bounce_vel = -BOUNCE_SPEED * intensity;
         }
+    }
+
+    fn wake_up_emoji(&mut self) {
+        self.wake_up_click_count += 1;
+        let base = Duration::from_secs(self.config.angry_base_duration_secs);
+        let extend =
+            Duration::from_secs(self.config.angry_click_extend_secs) * self.wake_up_click_count.saturating_sub(1);
+        let max_dur = Duration::from_secs(self.config.angry_click_max_duration_secs);
+        let total = base + extend;
+        let total = total.min(max_dur);
+
+        self.wake_up_angry_until = Some(Instant::now() + total);
+
+        let intensity = 1.0 + (self.wake_up_click_count as f32 * 0.3).min(1.5);
+        self.trigger_shake(intensity);
+        self.set_current_emoji(EmojiId::Angry, true, true);
     }
 
     fn update_animation(&mut self) {
@@ -139,27 +227,10 @@ impl App {
                 }
             }
         }
-        if self.is_hovering {
-            self.breath_phase += 0.00375;
-        }
-    }
-
-    fn get_breath_offset(&self) -> f32 {
-        if self.is_hovering {
-            self.breath_phase.sin() * 2.0
-        } else {
-            0.0
-        }
     }
 
     fn update(&mut self) {
         self.update_animation();
-        self.update_eye();
-
-        if let Ok(pos) = self.window.outer_position() {
-            self.window_x = pos.x as f32 + 60.0;
-            self.window_y = pos.y as f32 + 60.0;
-        }
 
         if self.last_update.elapsed() >= Duration::from_secs(self.config.update_interval_secs) {
             self.monitor.update();
@@ -167,39 +238,149 @@ impl App {
                 .set_idle(self.last_activity.elapsed().as_secs());
 
             if self.auto_mode {
-                let info = self.monitor.get_info();
-                let new_idx = if info.cpu_usage > self.config.cpu_threshold {
-                    5
-                } else if info.memory_usage > self.config.memory_threshold {
-                    6
-                } else if info.is_idle {
-                    3
-                } else {
-                    0
-                };
-                self.current_emoji_idx = new_idx;
+                let next_emoji = self.resolve_auto_emoji();
+                self.set_current_emoji(next_emoji, true, false);
             }
+
             self.last_update = Instant::now();
         }
     }
 
-    fn render(&mut self) {
-        let center_y = 60.0 + self.bounce_y + self.get_breath_offset();
-        self.renderer.render(
-            &self.window,
-            self.current_emoji_char(),
-            center_y,
-            EMOJI_RADIUS,
-            self.eye_x,
-            self.eye_y,
+    fn base_transform(&self) -> EmojiTransform {
+        let mut idle = compute_idle_transform(self.animation_started_at.elapsed().as_secs_f32());
+        let intensity = if self.is_hovering { 1.0 } else { 0.45 };
+        idle.offset_y *= intensity;
+        idle.scale = 1.0 + (idle.scale - 1.0) * intensity;
+
+        let bounce_scale = if self.is_bouncing {
+            (-self.bounce_y / 28.0).clamp(0.0, 1.0) * 0.05
+        } else {
+            0.0
+        };
+
+        let base = EmojiTransform::new(
+            idle.scale + bounce_scale,
+            idle.offset_x,
+            idle.offset_y + self.bounce_y,
+            self.config.opacity.clamp(0.0, 1.0),
         );
+
+        base.combine(compute_state_accent_transform(
+            self.current_emoji,
+            self.animation_started_at.elapsed().as_secs_f32(),
+        ))
     }
 
-    fn select_emoji(&mut self, idx: usize) {
-        self.manual_emoji = Some(idx);
+    fn transition_progress(&self) -> f32 {
+        self.transition_started_at
+            .map(|started| {
+                (started.elapsed().as_secs_f32() / TRANSITION_DURATION.as_secs_f32())
+                    .clamp(0.0, 1.0)
+            })
+            .unwrap_or(1.0)
+    }
+
+    fn finish_transition_if_needed(&mut self) {
+        if self.transition_progress() >= 1.0 {
+            self.previous_emoji = None;
+            self.transition_started_at = None;
+        }
+    }
+
+    fn render(&mut self) {
+        let base = self
+            .base_transform()
+            .combine(self.closed_eye_response_transform());
+        let progress = ease_out_cubic(self.transition_progress());
+        let mut layers = Vec::with_capacity(2);
+        let gaze = self.current_gaze_direction();
+
+        if let Some(previous) = self.previous_emoji {
+            let previous_image = self.assets.get_variant(previous, gaze).unwrap();
+            layers.push(RenderLayer {
+                image: previous_image,
+                transform: EmojiTransform::new(
+                    base.scale * (1.0 - 0.04 * progress),
+                    base.offset_x,
+                    base.offset_y - progress * 2.0,
+                    base.alpha * (1.0 - progress),
+                ),
+            });
+        }
+
+        let current_image = self.assets.get_variant(self.current_emoji, gaze).unwrap();
+        let current_progress = if self.previous_emoji.is_some() {
+            progress
+        } else {
+            1.0
+        };
+        layers.push(RenderLayer {
+            image: current_image,
+            transform: EmojiTransform::new(
+                base.scale * (0.96 + 0.04 * current_progress),
+                base.offset_x,
+                base.offset_y + (1.0 - current_progress) * 2.0,
+                base.alpha * current_progress,
+            ),
+        });
+
+        let bubble = self.current_bubble_overlay();
+        self.renderer
+            .render_layers(&self.window, &layers, bubble.as_ref());
+        self.finish_transition_if_needed();
+    }
+
+    fn current_gaze_direction(&self) -> GazeDirection {
+        let Some((center_x, center_y)) = self.window_gaze_center() else {
+            return GazeDirection::Center;
+        };
+
+        let (cursor_x, cursor_y) = get_screen_cursor_pos();
+
+        GazeDirection::from_pointer_delta(cursor_x - center_x, cursor_y - center_y)
+    }
+
+    fn current_bubble_overlay(&self) -> Option<BubbleOverlay> {
+        let info = self.monitor.get_info();
+        let elapsed = self.animation_started_at.elapsed().as_secs();
+        BubbleOverlay::for_state(
+            self.current_emoji,
+            info.cpu_usage.round().clamp(0.0, 100.0) as u8,
+            info.memory_usage.round().clamp(0.0, 100.0) as u8,
+            elapsed,
+        )
+    }
+
+    fn closed_eye_response_transform(&self) -> EmojiTransform {
+        let Some((center_x, center_y)) = self.window_gaze_center() else {
+            return EmojiTransform::identity();
+        };
+
+        let (cursor_x, cursor_y) = get_screen_cursor_pos();
+
+        compute_closed_eye_response(
+            self.current_emoji,
+            cursor_x - center_x,
+            cursor_y - center_y,
+            self.animation_started_at.elapsed().as_secs_f32(),
+        )
+    }
+
+    fn window_gaze_center(&self) -> Option<(f32, f32)> {
+        let window_pos = self.window.outer_position().ok()?;
+        let size = self.window.inner_size();
+        Some((
+            window_pos.x as f32 + size.width as f32 * GAZE_CENTER_X_RATIO,
+            window_pos.y as f32 + size.height as f32 * GAZE_CENTER_Y_RATIO,
+        ))
+    }
+
+    fn select_emoji(&mut self, emoji: EmojiId) {
+        self.manual_emoji = Some(emoji);
         self.auto_mode = false;
         self.config.auto_mode = false;
         self.config.save();
+        self.set_current_emoji(emoji, true, true);
         self.trigger_bounce();
     }
 
@@ -207,6 +388,11 @@ impl App {
         self.auto_mode = !self.auto_mode;
         if self.auto_mode {
             self.manual_emoji = None;
+            self.monitor.update();
+            self.monitor
+                .set_idle(self.last_activity.elapsed().as_secs());
+            let next_emoji = self.resolve_auto_emoji();
+            self.set_current_emoji(next_emoji, true, true);
         }
         self.config.auto_mode = self.auto_mode;
         self.config.save();
@@ -214,14 +400,19 @@ impl App {
     }
 
     fn toggle_startup(&mut self) {
-        self.config.startup = !self.config.startup;
-        self.config.save();
+        let next = !self.config.startup;
+        Settings::set_startup(&mut self.config, next);
     }
 
     fn handle_menu_cmd(&mut self, cmd: i32) {
         match cmd {
             100 => self.toggle_auto(),
-            200..=207 => self.select_emoji((cmd - 200) as usize),
+            200..=207 => {
+                let index = (cmd - 200) as usize;
+                if let Some(&emoji) = APPROVED_EMOJIS.get(index) {
+                    self.select_emoji(emoji);
+                }
+            }
             300 => Settings::print_settings(&self.config),
             301 => self.toggle_startup(),
             999 => std::process::exit(0),
@@ -230,17 +421,37 @@ impl App {
     }
 }
 
+fn ease_out_cubic(value: f32) -> f32 {
+    let t = value.clamp(0.0, 1.0);
+    1.0 - (1.0 - t).powi(3)
+}
+
 fn get_screen_cursor_pos() -> (f32, f32) {
     unsafe {
         use windows::Win32::Foundation::POINT;
         use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+
         let mut pt = POINT { x: 0, y: 0 };
         let _ = GetCursorPos(&mut pt);
         (pt.x as f32, pt.y as f32)
     }
 }
 
-fn show_popup_menu(x: i32, y: i32, auto_mode: bool, startup: bool) -> i32 {
+fn window_hwnd(window: &Window) -> Option<windows::Win32::Foundation::HWND> {
+    let handle = window.window_handle().ok()?;
+    match handle.as_raw() {
+        RawWindowHandle::Win32(handle) => Some(windows::Win32::Foundation::HWND(handle.hwnd.get())),
+        _ => None,
+    }
+}
+
+fn show_popup_menu(
+    owner: windows::Win32::Foundation::HWND,
+    x: i32,
+    y: i32,
+    auto_mode: bool,
+    startup: bool,
+) -> i32 {
     unsafe {
         use windows::Win32::Foundation::*;
         use windows::Win32::UI::WindowsAndMessaging::*;
@@ -263,28 +474,40 @@ fn show_popup_menu(x: i32, y: i32, auto_mode: bool, startup: bool) -> i32 {
 
         AppendMenuW(hmenu, MF_SEPARATOR, 0, windows::core::PCWSTR::null()).unwrap();
 
-        for (i, (emoji, name)) in EMOJIS.iter().enumerate() {
-            let text = format!("{} {}\0", emoji, name);
+        for (i, emoji_id) in APPROVED_EMOJIS.iter().enumerate() {
+            let text = format!("{} {}\0", emoji_id.emoji_char(), emoji_id.label_zh());
             let w: Vec<u16> = text.encode_utf16().collect();
-            AppendMenuW(hmenu, MF_STRING, 200 + i, windows::core::PCWSTR(w.as_ptr())).unwrap();
+            AppendMenuW(
+                hmenu,
+                MF_STRING,
+                200usize + i,
+                windows::core::PCWSTR(w.as_ptr()),
+            )
+            .unwrap();
         }
 
         AppendMenuW(hmenu, MF_SEPARATOR, 0, windows::core::PCWSTR::null()).unwrap();
 
-        let set_w: Vec<u16> = "设置\0".encode_utf16().collect();
-        AppendMenuW(hmenu, MF_STRING, 300, windows::core::PCWSTR(set_w.as_ptr())).unwrap();
+        let settings_w: Vec<u16> = "设置\0".encode_utf16().collect();
+        AppendMenuW(
+            hmenu,
+            MF_STRING,
+            300,
+            windows::core::PCWSTR(settings_w.as_ptr()),
+        )
+        .unwrap();
 
-        let start_text = if startup {
+        let startup_text = if startup {
             "开机启动 ✓\0"
         } else {
             "开机启动\0"
         };
-        let start_w: Vec<u16> = start_text.encode_utf16().collect();
+        let startup_w: Vec<u16> = startup_text.encode_utf16().collect();
         AppendMenuW(
             hmenu,
             MF_STRING,
             301,
-            windows::core::PCWSTR(start_w.as_ptr()),
+            windows::core::PCWSTR(startup_w.as_ptr()),
         )
         .unwrap();
 
@@ -299,9 +522,10 @@ fn show_popup_menu(x: i32, y: i32, auto_mode: bool, startup: bool) -> i32 {
         )
         .unwrap();
 
-        // TPM_RIGHTBUTTON = 0x0002, TPM_RETURNCMD = 0x0100
-        let flags: u32 = 0x0002 | 0x0100;
-        let cmd = TrackPopupMenuEx(hmenu, flags, x, y, HWND(0), None);
+        let _ = SetForegroundWindow(owner);
+        let flags = TPM_RIGHTBUTTON.0 | TPM_RETURNCMD.0;
+        let cmd = TrackPopupMenuEx(hmenu, flags, x, y, owner, None);
+        let _ = PostMessageW(owner, WM_NULL, WPARAM(0), LPARAM(0));
 
         DestroyMenu(hmenu).ok();
         cmd.0
@@ -309,6 +533,13 @@ fn show_popup_menu(x: i32, y: i32, auto_mode: bool, startup: bool) -> i32 {
 }
 
 fn main() {
+    unsafe {
+        use windows::Win32::UI::HiDpi::{
+            SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+        };
+        let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+
     let event_loop = EventLoop::new().unwrap();
 
     let mut icon_data = Vec::with_capacity(16 * 16 * 4);
@@ -326,11 +557,10 @@ fn main() {
         .unwrap();
 
     let manual_menu = tray_icon::menu::Submenu::new("手动选择", true);
-    let mut manual_items = Vec::new();
-    for (emoji, name) in EMOJIS {
-        let item = tray_icon::menu::MenuItem::new(format!("{} {}", emoji, name), true, None);
+    for emoji_id in APPROVED_EMOJIS {
+        let text = format!("{} {}", emoji_id.emoji_char(), emoji_id.label_zh());
+        let item = tray_icon::menu::MenuItem::new(text, true, None);
         manual_menu.append(&item).unwrap();
-        manual_items.push(item);
     }
     tray_menu.append(&manual_menu).unwrap();
     tray_menu
@@ -359,11 +589,11 @@ fn main() {
 
     let position = event_loop
         .primary_monitor()
-        .map(|m| {
-            let s = m.size();
+        .map(|monitor| {
+            let size = monitor.size();
             PhysicalPosition::new(
-                (s.width - WINDOW_SIZE - WINDOW_MARGIN_RIGHT as u32) as i32,
-                (s.height - WINDOW_SIZE - WINDOW_MARGIN_BOTTOM as u32) as i32,
+                (size.width - WINDOW_WIDTH - WINDOW_MARGIN_RIGHT as u32) as i32,
+                (size.height - WINDOW_HEIGHT - WINDOW_MARGIN_BOTTOM as u32) as i32,
             )
         })
         .unwrap_or(PhysicalPosition::new(100, 100));
@@ -371,7 +601,7 @@ fn main() {
     let window = Rc::new(
         WindowBuilder::new()
             .with_title("Deskemoji")
-            .with_inner_size(PhysicalSize::new(WINDOW_SIZE, WINDOW_SIZE))
+            .with_inner_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT))
             .with_position(position)
             .with_decorations(false)
             .with_transparent(true)
@@ -380,75 +610,87 @@ fn main() {
             .build(&event_loop)
             .unwrap(),
     );
+    window.set_undecorated_shadow(false);
 
     let mut app = App::new(window.clone());
     app.render();
 
-    event_loop.run(move |event, elwt| {
-        if let Ok(e) = menu_channel.try_recv() {
-            if e.id == quit_item.id() {
+    let _ = event_loop.run(move |event, elwt| {
+        if let Ok(menu_event) = menu_channel.try_recv() {
+            if menu_event.id == quit_item.id() {
                 elwt.exit();
                 return;
-            } else if e.id == auto_item.id() {
+            }
+
+            if menu_event.id == auto_item.id() {
                 app.toggle_auto();
                 auto_item.set_text(if app.auto_mode {
                     "自动模式 ✓"
                 } else {
                     "自动模式"
                 });
-            } else if e.id == settings_item.id() {
+            } else if menu_event.id == settings_item.id() {
                 Settings::print_settings(&app.config);
+            } else if menu_event.id == startup_item.id() {
+                app.toggle_startup();
             }
         }
 
         match event {
+            Event::DeviceEvent { event, .. } => match event {
+                DeviceEvent::Key(_) | DeviceEvent::Button { .. } => {
+                    app.input_monitor.record_key_or_click();
+                    app.last_activity = Instant::now();
+                }
+                _ => {}
+            },
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => elwt.exit(),
                 WindowEvent::RedrawRequested => app.render(),
                 WindowEvent::MouseInput { button, state, .. } => {
                     if button == MouseButton::Left && state == ElementState::Pressed {
-                        // 检测快速连续点击（双击）
                         let now = Instant::now();
                         let click_interval = now.duration_since(app.last_click_time);
                         let is_double_click = click_interval < Duration::from_millis(300);
                         app.last_click_time = now;
 
-                        // 双击时不执行任何操作
-                        if is_double_click {
-                            // 不触发弹跳，不执行拖动
-                        } else {
-                            // 单击：正常处理
-                            app.trigger_bounce();
-                            let _ = app.window.drag_window();
-                            app.last_activity = Instant::now();
+                        if !is_double_click {
+                            if [EmojiId::Sleepy, EmojiId::Goodnight].contains(&app.current_emoji) {
+                                app.wake_up_emoji();
+                            } else {
+                                app.trigger_bounce();
+                                let _ = app.window.drag_window();
+                                app.last_activity = Instant::now();
+                            }
                         }
                     }
-                    if button == MouseButton::Right && state == ElementState::Released {
-                        let (sx, sy) = get_screen_cursor_pos();
-                        let cmd = show_popup_menu(
-                            sx as i32,
-                            sy as i32,
-                            app.auto_mode,
-                            app.config.startup,
-                        );
-                        if cmd > 0 {
-                            app.handle_menu_cmd(cmd);
+
+                    if button == MouseButton::Right && state == ElementState::Pressed {
+                        let (screen_x, screen_y) = get_screen_cursor_pos();
+                        if let Some(owner) = window_hwnd(app.window.as_ref()) {
+                            let cmd = show_popup_menu(
+                                owner,
+                                screen_x as i32,
+                                screen_y as i32,
+                                app.auto_mode,
+                                app.config.startup,
+                            );
+                            if cmd > 0 {
+                                app.handle_menu_cmd(cmd);
+                            }
                         }
                     }
                 }
                 WindowEvent::CursorEntered { .. } => {
                     app.is_hovering = true;
-                    app.breath_phase = 0.0;
                 }
                 WindowEvent::CursorLeft { .. } => {
                     app.is_hovering = false;
                 }
+                WindowEvent::CursorMoved { .. } => {}
                 _ => {}
             },
             Event::AboutToWait => {
-                let (sx, sy) = get_screen_cursor_pos();
-                app.screen_mouse_x = sx;
-                app.screen_mouse_y = sy;
                 app.update();
                 app.window.request_redraw();
                 elwt.set_control_flow(ControlFlow::WaitUntil(

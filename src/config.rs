@@ -12,6 +12,15 @@ pub struct Config {
     pub idle_threshold_secs: u64,
     pub opacity: f32,
     pub window_size: u32,
+    // 新增：状态系统相关阈值
+    pub hot_cpu_threshold: f32,
+    pub hot_memory_threshold: f32,
+    pub mindblown_cpu_threshold: f32,
+    pub mindblown_memory_threshold: f32,
+    pub state_switch_interval_secs: u64,
+    pub angry_base_duration_secs: u64,
+    pub angry_click_extend_secs: u64,
+    pub angry_click_max_duration_secs: u64,
 }
 
 impl Default for Config {
@@ -25,6 +34,14 @@ impl Default for Config {
             idle_threshold_secs: 300,
             opacity: 1.0,
             window_size: 120,
+            hot_cpu_threshold: 70.0,
+            hot_memory_threshold: 70.0,
+            mindblown_cpu_threshold: 90.0,
+            mindblown_memory_threshold: 90.0,
+            state_switch_interval_secs: 5,
+            angry_base_duration_secs: 5,
+            angry_click_extend_secs: 2,
+            angry_click_max_duration_secs: 15,
         }
     }
 }

@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deskemoji 状态系统改造 — 下一步开发计划 v2</title>
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --surface: #151b2b;
+            --surface-2: #1e2538;
+            --surface-3: #283049;
+            --text: #f0f4f8;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-2: #818cf8;
+            --accent-3: #f472b6;
+            --success: #4ade80;
+            --warning: #facc15;
+            --error: #f87171;
+            --border: #2d3655;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px 80px;
+        }
+        header {
+            text-align: center;
+            padding: 50px 20px;
+            background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 30px;
+        }
+        header h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(90deg, var(--accent-3), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        header p { color: var(--text-muted); font-size: 1rem; }
+
+        .status-bar {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 18px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .status-bar .indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        .status-bar .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--success); animation: pulse 2s infinite;
+        }
+        .status-bar .dot.offline { background: var(--error); animation: none; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+        .intro-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px 24px;
+            margin-bottom: 28px;
+            color: var(--text-muted);
+        }
+        .intro-box strong { color: var(--text); }
+        .intro-box ul { margin: 10px 0 0 20px; }
+        .intro-box li { margin-bottom: 6px; }
+
+        .phase-section { margin-bottom: 36px; }
+        .phase-header {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 18px; padding-bottom: 10px;
+            border-bottom: 2px solid var(--border);
+        }
+        .phase-badge {
+            padding: 4px 14px; border-radius: 20px;
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+        }
+        .badge-high { background: var(--error); color: #fff; }
+        .badge-mid { background: var(--warning); color: #000; }
+        .badge-low { background: var(--accent-2); color: #fff; }
+        .phase-title { font-size: 1.25rem; font-weight: 600; }
+        .phase-sub { margin-left: auto; color: var(--text-muted); font-size: 0.9rem; }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 22px;
+            margin-bottom: 14px;
+            transition: border-color 0.2s;
+        }
+        .card:hover { border-color: var(--surface-3); }
+        .card.approved { border-left: 4px solid var(--success); }
+        .card.rejected { border-left: 4px solid var(--error); opacity: 0.85; }
+        .card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+        .emoji-icon { font-size: 2rem; line-height: 1; }
+        .card-title { font-size: 1.15rem; font-weight: 600; flex: 1; }
+        .card-desc { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 14px; padding-left: 48px; }
+        .card-desc ul { margin: 8px 0 0 18px; }
+        .card-desc li { margin-bottom: 4px; }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px; margin-bottom: 14px; padding-left: 48px;
+        }
+        .control-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
+        .control-group select, .control-group input[type="text"] {
+            width: 100%; padding: 8px 10px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+            font-size: 0.9rem;
+        }
+        .control-group input[type="range"] { width: 100%; accent-color: var(--accent-3); }
+        .range-val { font-size: 0.8rem; color: var(--accent-3); margin-left: 6px; }
+
+        .toggle-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .toggle-btn {
+            padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--surface-2); color: var(--text-muted);
+            cursor: pointer; font-size: 0.85rem; user-select: none; transition: all 0.15s;
+        }
+        .toggle-btn.active { background: var(--success); border-color: var(--success); color: #000; font-weight: 600; }
+        .toggle-btn.rej.active { background: var(--error); border-color: var(--error); color: #fff; }
+
+        .comment-box {
+            width: 100%; min-height: 64px; padding: 10px 12px; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+            font-size: 0.95rem; resize: vertical; font-family: inherit;
+            margin-left: 48px; width: calc(100% - 48px);
+        }
+        .comment-box::placeholder { color: #64748b; }
+        .comment-box.saving { border-color: var(--warning); }
+        .comment-box.saved { border-color: var(--success); }
+
+        @media (max-width: 900px) {
+            .controls, .card-desc, .comment-box { padding-left: 0; margin-left: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Deskemoji 状态系统改造计划 v2</h1>
+        <p>基于你的 Emoji State Review 反馈 — 自动保存已启用</p>
+    </header>
+
+    <div class="container">
+        <div class="status-bar">
+            <div class="indicator">
+                <span class="dot" id="connDot"></span>
+                <span id="connText">正在连接本地保存服务...</span>
+            </div>
+            <div style="font-size:0.85rem;color:var(--text-muted);">数据实时保存至 <code>.review-data/deskemoji-state-plan-v2.json</code></div>
+        </div>
+
+        <div class="intro-box">
+            <strong>基于你的 Review 意见，需要改造的核心方向：</strong>
+            <ul>
+                <li>引入<strong>输入频率检测系统</strong>（键盘+鼠标）来驱动 Happy / Thinking / Angry 的自动切换</li>
+                <li>Sad 由<strong>程序未响应检测</strong>自动触发</li>
+                <li>Hot 与 Mindblown 改为<strong>升级关系</strong>：Hot（偏高）→ Mindblown（>90%）</li>
+                <li>Sleepy / Goodnight <strong>点击被吵醒</strong> → 转变为 Angry</li>
+                <li>Hot 的气泡内容可<strong>交替显示</strong> CPU 和内存使用率</li>
+            </ul>
+        </div>
+
+        <!-- 高优：输入频率检测系统 -->
+        <div class="phase-section" data-phase="high">
+            <div class="phase-header">
+                <span class="phase-badge badge-high">高优</span>
+                <span class="phase-title">输入频率检测系统（全新模块）</span>
+                <span class="phase-sub">核心基础设施</span>
+            </div>
+
+            <div class="card" data-id="p1" data-title="输入频率检测器实现">
+                <div class="card-header">
+                    <span class="emoji-icon">⌨️🖱️</span>
+                    <div class="card-title">输入频率检测器实现</div>
+                </div>
+                <div class="card-desc">
+                    需要新增一个模块来监听全局键盘和鼠标输入频率。Windows 下可以通过 Raw Input / Low-level hooks（WH_KEYBOARD_LL / WH_MOUSE_LL）或 GetLastInputInfo 的滑动窗口统计来实现。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 必须做</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 用更简单方案替代</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>技术实现方案</label>
+                        <select data-key="tech">
+                            <option value="">请选择...</option>
+                            <option value="hook">Low-level hooks（最精准，但有安全软件风险）</option>
+                            <option value="lastinput">GetLastInputInfo 滑动窗口统计（最简单，但粒度粗）</option>
+                            <option value="rawinput">Raw Input（平衡方案，只统计不拦截）</option>
+                            <option value="hybrid">混合：Raw Input + GetLastInputInfo 校验</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>统计窗口时长</label>
+                        <select data-key="window">
+                            <option value="">请选择...</option>
+                            <option value="3s">3 秒（非常灵敏）</option>
+                            <option value="10s">10 秒（推荐）</option>
+                            <option value="30s">30 秒（较平滑）</option>
+                            <option value="60s">1 分钟（偏稳定）</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>是否需要区分键盘和鼠标</label>
+                        <select data-key="separate">
+                            <option value="">请选择...</option>
+                            <option value="yes">区分（比如狂点鼠标和狂敲键盘算不同场景）</option>
+                            <option value="no">不区分，只看总输入事件数</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如对安全软件误报的顾虑、是否需要排除游戏场景..."></textarea>
+            </div>
+
+            <div class="card" data-id="p2" data-title="输入频率 → 状态映射规则">
+                <div class="card-header">
+                    <span class="emoji-icon">📊</span>
+                    <div class="card-title">输入频率 → 状态映射规则</div>
+                </div>
+                <div class="card-desc">
+                    根据你的反馈，Happy = "正常频率"，Thinking = "相对稳定"，Angry = "频率很高"。需要把这三个模糊的描述量化为可执行的阈值区间。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 按此规则实现</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 重新定义映射</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Angry（高频）的判定标准</label>
+                        <select data-key="angry_threshold">
+                            <option value="">请选择...</option>
+                            <option value="very_high">每分钟 > 300 次输入事件</option>
+                            <option value="high">每分钟 > 180 次输入事件</option>
+                            <option value="burst">连续 5 秒每秒 > 8 次（爆发模式）</option>
+                            <option value="custom">用户可自定义</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Thinking（稳定）的判定标准</label>
+                        <select data-key="thinking_threshold">
+                            <option value="">请选择...</option>
+                            <option value="low_variation">有持续输入，且波动系数 < 30%</option>
+                            <option value="moderate">每分钟 30-120 次</option>
+                            <option value="typing">连续出现键盘输入（排除纯鼠标）</option>
+                            <option value="custom">用户可自定义</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Happy（正常）的位置</label>
+                        <select data-key="happy_position">
+                            <option value="">请选择...</option>
+                            <option value="between">介于 Thinking 和 Angry 之间</option>
+                            <option value="low_activity">低频率但有输入时（每分钟 1-30 次）</option>
+                            <option value="fallback">仍作为最终 fallback（无其他条件满足时）</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如三个状态之间的过渡要不要有延迟避免频繁跳变..."></textarea>
+            </div>
+        </div>
+
+        <!-- 高优：Sad 自动触发 -->
+        <div class="phase-section" data-phase="high">
+            <div class="phase-header">
+                <span class="phase-badge badge-high">高优</span>
+                <span class="phase-title">Sad 的自动触发机制</span>
+                <span class="phase-sub">新增情绪检测能力</span>
+            </div>
+
+            <div class="card" data-id="p3" data-title="程序未响应检测">
+                <div class="card-header">
+                    <span class="emoji-icon">😢</span>
+                    <div class="card-title">程序未响应检测</div>
+                </div>
+                <div class="card-desc">
+                    你的反馈："有程序进入未响应状态时可以出现此状态"。Windows 下可以通过 IsHungAppWindow 或检测前台窗口标题栏是否显示"未响应"来实现。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 实现此触发</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 暂时不做</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>检测范围</label>
+                        <select data-key="scope">
+                            <option value="">请选择...</option>
+                            <option value="foreground">仅检测前台窗口（用户当前关注的）</option>
+                            <option value="any">检测任意可见窗口未响应</option>
+                            <option value="whitelist">只检测用户常用应用白名单</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Sad 触发后的持续时间</label>
+                        <select data-key="duration">
+                            <option value="">请选择...</option>
+                            <option value="until_responsive">程序恢复响应后立即结束</option>
+                            <option value="10s">持续 10 秒</option>
+                            <option value="30s">持续 30 秒</option>
+                            <option value="manual">直到用户手动切换其他状态</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Sad 的优先级定位</label>
+                        <select data-key="priority">
+                            <option value="">请选择...</option>
+                            <option value="high">高优先级（仅次于 Hot/Mindblown）</option>
+                            <option value="mid">中优先级（可被 Hot/Mindblown 覆盖）</option>
+                            <option value="override_all">最高优先级（系统卡顿时最重要）</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如是否只在特定应用（如 Chrome、IDE）未响应时触发..."></textarea>
+            </div>
+        </div>
+
+        <!-- 中优：Hot/Mindblown 重构 -->
+        <div class="phase-section" data-phase="mid">
+            <div class="phase-header">
+                <span class="phase-badge badge-mid">中优</span>
+                <span class="phase-title">Hot / Mindblown 关系重构</span>
+                <span class="phase-sub">状态升级链路</span>
+            </div>
+
+            <div class="card" data-id="p4" data-title="Hot 与 Mindblown 的升级链">
+                <div class="card-header">
+                    <span class="emoji-icon">🥵 → 🤯</span>
+                    <div class="card-title">Hot 与 Mindblown 的升级链</div>
+                </div>
+                <div class="card-desc">
+                    你的反馈：Hot 是"CPU 或内存使用率偏高"，Mindblown 是"CPU 或内存使用率超过 90% 的时候，由 Hot 状态转变过来"。这意味着它们不再是两个独立并行的状态，而是一条升级路径。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 改为升级链</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持并行独立</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Hot 的触发阈值</label>
+                        <select data-key="hot_threshold">
+                            <option value="">请选择...</option>
+                            <option value="cpu_or_mem_70">CPU 或内存 > 70%</option>
+                            <option value="cpu_or_mem_60">CPU 或内存 > 60%</option>
+                            <option value="combined_100">CPU + 内存 > 100%</option>
+                            <option value="configurable">用户可配置</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Mindblown 的触发阈值</label>
+                        <select data-key="mindblown_threshold">
+                            <option value="">请选择...</option>
+                            <option value="cpu_or_mem_90">CPU 或内存 > 90%（你的原意见）</option>
+                            <option value="cpu_and_mem_80">CPU 和内存都 > 80%</option>
+                            <option value="sustained_hot">Hot 状态持续超过 30 秒后升级</option>
+                            <option value="configurable">用户可配置</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>升级方向</label>
+                        <select data-key="upgrade_direction">
+                            <option value="">请选择...</option>
+                            <option value="hot_to_mindblown_only">只能 Hot → Mindblown，不能跳变</option>
+                            <option value="direct_if_critical">极端情况下可直接跳到 Mindblown</option>
+                            <option value="bidirectional">可降级：资源下降后 Mindblown → Hot</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如是否需要 hysteresis（滞后）避免在阈值边缘反复横跳..."></textarea>
+            </div>
+
+            <div class="card" data-id="p5" data-title="Hot 气泡交替显示">
+                <div class="card-header">
+                    <span class="emoji-icon">💬</span>
+                    <div class="card-title">Hot 气泡交替显示 CPU / 内存</div>
+                </div>
+                <div class="card-desc">
+                    你的反馈："气泡内容可以是 cpu 或内存使用率的交替出现"。目前只有固定内容，需要让气泡支持轮播/交替刷新。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 实现交替</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持单一内容</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>交替方式</label>
+                        <select data-key="alternation">
+                            <option value="">请选择...</option>
+                            <option value="timer_3s">每 3 秒切换一次</option>
+                            <option value="timer_5s">每 5 秒切换一次</option>
+                            <option value="hover_click">鼠标 hover/点击气泡切换</option>
+                            <option value="show_higher">始终显示当前更高的那个</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Mindblown 是否也需要气泡</label>
+                        <select data-key="mindblown_bubble">
+                            <option value="">请选择...</option>
+                            <option value="yes_same">是，和 Hot 一样交替显示</option>
+                            <option value="yes_combined">是，显示"CPU 92% | MEM 88%" 合并内容</option>
+                            <option value="no">否，Mindblown 不需要气泡</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如气泡文字格式偏好、动画效果..."></textarea>
+            </div>
+        </div>
+
+        <!-- 中优：Sleepy/Goodnight 交互 -->
+        <div class="phase-section" data-phase="mid">
+            <div class="phase-header">
+                <span class="phase-badge badge-mid">中优</span>
+                <span class="phase-title">Sleepy / Goodnight 点击交互</span>
+                <span class="phase-sub">"被吵醒"机制</span>
+            </div>
+
+            <div class="card" data-id="p6" data-title="点击 Sleepy/Goodnight → Angry">
+                <div class="card-header">
+                    <span class="emoji-icon">😴😌 → 😠</span>
+                    <div class="card-title">点击 Sleepy/Goodnight → 变为 Angry</div>
+                </div>
+                <div class="card-desc">
+                    你的反馈：Sleepy 和 Goodnight 状态下，鼠标点击 Emoji 本地时"转变为生气状态"。这是一个很有趣的情绪化交互设计——用户把睡着的 Emoji "吵醒"了，它当然会生气。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 必须做</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 暂时不做</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>点击后的 Angry 持续时长</label>
+                        <select data-key="angry_duration">
+                            <option value="">请选择...</option>
+                            <option value="5s">5 秒（快速消气）</option>
+                            <option value="10s">10 秒</option>
+                            <option value="30s">30 秒</option>
+                            <option value="until_idle">直到系统回到空闲/深夜状态</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>是否增加"叫醒"动画效果</label>
+                        <select data-key="wake_animation">
+                            <option value="">请选择...</option>
+                            <option value="shake">剧烈震动一下再变 Angry</option>
+                            <option value="blink">先睁眼再变 Angry</option>
+                            <option value="jump">惊吓弹跳</option>
+                            <option value="none">不需要特殊动画，直接切换</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>频繁点击的处理</label>
+                        <select data-key="spam_protection">
+                            <option value="">请选择...</option>
+                            <option value="cooldown_3s">3 秒冷却期</option>
+                            <option value="no_limit">不设限，用户可以一直点</option>
+                            <option value="escalate">频繁点击会让 Angry 更严重/更持久</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如 Angry 结束后应该回到什么状态（Sleepy/Goodnight 还是别的）..."></textarea>
+            </div>
+        </div>
+
+        <!-- 低优：规则补充与边界 -->
+        <div class="phase-section" data-phase="low">
+            <div class="phase-header">
+                <span class="phase-badge badge-low">低优</span>
+                <span class="phase-title">规则补充与边界情况</span>
+                <span class="phase-sub">避免状态混乱</span>
+            </div>
+
+            <div class="card" data-id="p7" data-title="多条件同时满足时的仲裁规则">
+                <div class="card-header">
+                    <span class="emoji-icon">⚖️</span>
+                    <div class="card-title">多条件同时满足时的仲裁规则</div>
+                </div>
+                <div class="card-desc">
+                    引入输入频率检测后，可能出现多个条件同时满足的情况：比如深夜（Goodnight）+ 高输入频率（Angry）+ CPU 偏高（Hot）。需要明确的优先级仲裁。
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 明确定义优先级</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持现有简单规则</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>建议的优先级（从上到下递减）</label>
+                        <select data-key="priority_order">
+                            <option value="">请选择...</option>
+                            <option value="sad_first">Sad（未响应）> Hot/Mindblown > Angry > Thinking/Happy > Sleepy/Goodnight</option>
+                            <option value="resource_first">Hot/Mindblown > Sad > Angry > Thinking/Happy > Sleepy/Goodnight</option>
+                            <option value="emotion_first">Angry > Sad > Hot/Mindblown > Thinking/Happy > Sleepy/Goodnight</option>
+                            <option value="custom">完全由用户自定义</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>状态切换的最小间隔</label>
+                        <select data-key="min_interval">
+                            <option value="">请选择...</option>
+                            <option value="1s">1 秒</option>
+                            <option value="3s">3 秒</option>
+                            <option value="5s">5 秒（推荐，防止跳变）</option>
+                            <option value="10s">10 秒</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见：比如还有没有遗漏的边界场景..."></textarea>
+            </div>
+
+            <div class="card" data-id="p8" data-title="Thinking 时段硬编码改造">
+                <div class="card-header">
+                    <span class="emoji-icon">🤔</span>
+                    <div class="card-title">Thinking 时段硬编码改造</div>
+                </div>
+                <div class="card-desc">
+                    当前 Thinking 固定在 10:00–17:59。你的新定义已经把它和"稳定输入频率"绑定了，时段限制是否还需要保留？还是改为"有稳定输入的白天时段"？
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>你的决策</label>
+                        <div class="toggle-row">
+                            <span class="toggle-btn" data-val="approved">✅ 改造时段规则</span>
+                            <span class="toggle-btn rej" data-val="rejected">❌ 保持 10-18 点</span>
+                            <span class="toggle-btn" data-val="pending">🤔 待定</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>改造方向</label>
+                        <select data-key="thinking_rule">
+                            <option value="">请选择...</option>
+                            <option value="input_only">完全由输入频率决定，去掉时间限制</option>
+                            <option value="daytime_input">白天（6:00-22:00）+ 稳定输入</option>
+                            <option value="user_config">允许用户自定义工作时段</option>
+                            <option value="keep_current">保持 10:00-17:59</option>
+                        </select>
+                    </div>
+                </div>
+                <textarea class="comment-box" data-key="note" placeholder="你的具体指导意见..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8765';
+        const FILENAME = 'deskemoji-state-plan-v2';
+        let savedData = {};
+        let isOnline = false;
+
+        async function loadData() {
+            try {
+                const res = await fetch(`${API_BASE}/api/load?filename=${FILENAME}`);
+                if (res.ok) {
+                    savedData = await res.json();
+                    isOnline = true;
+                    updateConnectionUI(true);
+                    populateUI();
+                } else throw new Error('Load failed');
+            } catch (e) {
+                isOnline = false;
+                updateConnectionUI(false);
+            }
+        }
+
+        function updateConnectionUI(online) {
+            const dot = document.getElementById('connDot');
+            const text = document.getElementById('connText');
+            if (online) {
+                dot.classList.remove('offline');
+                text.textContent = '本地保存服务已连接，输入自动持久化';
+            } else {
+                dot.classList.add('offline');
+                text.textContent = '本地保存服务未连接（请运行 python review-server.py）';
+            }
+        }
+
+        function populateUI() {
+            document.querySelectorAll('.card').forEach(card => {
+                const id = card.dataset.id;
+                const data = savedData[id] || {};
+
+                if (data.decision) {
+                    const btns = card.querySelectorAll('.toggle-btn');
+                    btns.forEach(b => {
+                        if (b.dataset.val === data.decision) {
+                            b.classList.add('active');
+                            if (data.decision === 'approved') card.classList.add('approved');
+                            if (data.decision === 'rejected') card.classList.add('rejected');
+                        } else {
+                            b.classList.remove('active');
+                        }
+                    });
+                }
+
+                card.querySelectorAll('select').forEach(sel => {
+                    const key = sel.dataset.key;
+                    if (data[key]) sel.value = data[key];
+                });
+
+                const ta = card.querySelector('.comment-box');
+                if (ta && data.note) ta.value = data.note;
+            });
+        }
+
+        async function saveCard(cardId) {
+            if (!isOnline) return;
+            const card = document.querySelector(`.card[data-id="${cardId}"]`);
+            const data = { id: cardId };
+
+            const activeBtn = card.querySelector('.toggle-btn.active');
+            if (activeBtn) data.decision = activeBtn.dataset.val;
+
+            card.querySelectorAll('select').forEach(sel => {
+                if (sel.value) data[sel.dataset.key] = sel.value;
+            });
+
+            const ta = card.querySelector('.comment-box');
+            if (ta && ta.value.trim()) data.note = ta.value.trim();
+
+            savedData[cardId] = data;
+
+            try {
+                await fetch(`${API_BASE}/api/save`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: FILENAME, data: savedData })
+                });
+            } catch (e) {
+                console.error('Save failed', e);
+            }
+        }
+
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const row = btn.closest('.toggle-row');
+                row.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const card = btn.closest('.card');
+                card.classList.remove('approved', 'rejected');
+                if (btn.dataset.val === 'approved') card.classList.add('approved');
+                if (btn.dataset.val === 'rejected') card.classList.add('rejected');
+                await saveCard(card.dataset.id);
+            });
+        });
+
+        document.querySelectorAll('select').forEach(sel => {
+            sel.addEventListener('change', async () => {
+                await saveCard(sel.closest('.card').dataset.id);
+            });
+        });
+
+        document.querySelectorAll('.comment-box').forEach(ta => {
+            let timeout;
+            ta.addEventListener('input', async () => {
+                clearTimeout(timeout);
+                ta.classList.add('saving');
+                timeout = setTimeout(async () => {
+                    await saveCard(ta.closest('.card').dataset.id);
+                    ta.classList.remove('saving');
+                    ta.classList.add('saved');
+                    setTimeout(() => ta.classList.remove('saved'), 600);
+                }, 400);
+            });
+        });
+
+        loadData();
+        setInterval(loadData, 5000);
+    </script>
+</body>
+</html>

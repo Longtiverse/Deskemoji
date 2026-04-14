@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deskemoji Emoji State Review Board</title>
+<style>
+  :root {
+    --bg-page: #F8F4EF;
+    --bg-card: #FFFDFB;
+    --bg-preview: #2B2520;
+    --text-primary: #3E3329;
+    --text-secondary: #7A6B5D;
+    --accent-warm: #D4A574;
+    --accent-strong: #C48B5F;
+    --border-light: #E9E1D8;
+    --border-medium: #D9CFC3;
+    --badge-auto: #E7F3E9;
+    --badge-auto-text: #4A7C59;
+    --badge-manual: #F3ECE7;
+    --badge-manual-text: #8C6B4F;
+    --shadow: 0 4px 18px rgba(62, 51, 41, 0.06);
+    --radius: 16px;
+    --radius-sm: 10px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-page);
+    color: var(--text-primary);
+    line-height: 1.6;
+    padding-bottom: 48px;
+  }
+
+  header {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 40px 24px 24px;
+  }
+  .header-top {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .subtitle {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    max-width: 520px;
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .btn {
+    appearance: none;
+    border: 1px solid var(--border-medium);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .btn:hover {
+    border-color: var(--accent-warm);
+    color: var(--accent-strong);
+  }
+  .btn-primary {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: #FFF;
+  }
+  .btn-primary:hover {
+    background: #2B2118;
+    border-color: #2B2118;
+    color: #FFF;
+  }
+
+  .rule-strip {
+    margin-top: 20px;
+    padding: 18px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .rule-strip h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .rules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .rules li {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .rules li::before {
+    content: attr(data-priority) ". ";
+    color: var(--accent-strong);
+    font-weight: 700;
+  }
+  .rule-note {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding-top: 10px;
+    border-top: 1px dashed var(--border-light);
+  }
+
+  main {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 8px 24px 40px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .card:hover {
+    box-shadow: 0 8px 28px rgba(62, 51, 41, 0.10);
+  }
+
+  .preview {
+    position: relative;
+    height: 220px;
+    background: var(--bg-preview);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    user-select: none;
+  }
+  .preview img {
+    width: 140px;
+    height: 140px;
+    object-fit: contain;
+    image-rendering: -webkit-optimize-contrast;
+    transform-origin: center center;
+    will-change: transform;
+    pointer-events: none;
+  }
+
+  .bubble {
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #F9F5F1;
+    border: 1.5px solid #D5C2B4;
+    color: #B84747;
+    padding: 5px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    opacity: 0.95;
+    pointer-events: none;
+  }
+  .bubble::after {
+    content: "";
+    position: absolute;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 7px solid #D5C2B4;
+  }
+  .bubble-inner::after {
+    content: "";
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #F9F5F1;
+  }
+  .bubble-inner {
+    position: relative;
+  }
+
+  .info {
+    padding: 18px 18px 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .emoji-char {
+    font-size: 36px;
+    line-height: 1;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08));
+  }
+  .title-text h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .name-en {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-top: 4px;
+  }
+  .badge.auto { background: var(--badge-auto); color: var(--badge-auto-text); }
+  .badge.manual { background: var(--badge-manual); color: var(--badge-manual-text); }
+
+  .desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0 0 14px;
+    flex: 1;
+  }
+  .desc p {
+    margin: 0 0 6px;
+  }
+  .desc strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .priority-note {
+    font-size: 12px;
+    color: #9A8B7D;
+    margin-top: 4px;
+  }
+
+  .feedback {
+    border-top: 1px solid var(--border-light);
+    padding-top: 12px;
+  }
+  .feedback-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .status-select {
+    appearance: none;
+    background: var(--bg-page) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A6B5D' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center;
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-sm);
+    padding: 6px 24px 6px 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .saved-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0;
+    transition: opacity .2s ease;
+  }
+  .saved-hint.visible { opacity: 1; }
+
+  .note-input {
+    width: 100%;
+    min-height: 64px;
+    resize: vertical;
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-page);
+  }
+  .note-input:focus, .status-select:focus {
+    outline: none;
+    border-color: var(--accent-warm);
+    background-color: #FFF;
+  }
+
+  @media (max-width: 640px) {
+    main { grid-template-columns: 1fr; padding: 8px 16px 32px; }
+    header { padding: 28px 16px 20px; }
+    h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div>
+      <h1>Deskemoji Emoji State Review Board</h1>
+      <p class="subtitle">一站式审查全部 8 个已批准状态。移动鼠标到预览区即可体验凝视跟随与状态动画。</p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="export-json">导出 JSON</button>
+      <button class="btn btn-primary" id="export-md">导出 Markdown</button>
+    </div>
+  </div>
+
+  <div class="rule-strip">
+    <h2>自动模式优先级（从高到低）</h2>
+    <ol class="rules">
+      <li data-priority="1"><strong>Hot</strong> — CPU 超过阈值</li>
+      <li data-priority="2"><strong>Mindblown</strong> — 内存超过阈值</li>
+      <li data-priority="3"><strong>Sleepy</strong> — 系统空闲时间达到阈值</li>
+      <li data-priority="4"><strong>Goodnight</strong> — 深夜时段（22:00–05:59）</li>
+      <li data-priority="5"><strong>Thinking</strong> — 白天工作时段（10:00–17:59）</li>
+      <li data-priority="6"><strong>Happy</strong> — 默认 fallback</li>
+    </ol>
+    <div class="rule-note">
+      <span aria-hidden="true">ℹ️</span> Sad 与 Angry 为手动选择状态，不参与自动竞争。
+    </div>
+  </div>
+</header>
+
+<main id="board"></main>
+
+<script>
+(function() {
+  'use strict';
+
+  const STATES = [
+    {
+      id: 'happy',
+      char: '\u{1F642}',
+      zh: '\u5F00\u5FC3',
+      en: 'Happy',
+      auto: true,
+      trigger: '默认 fallback，当没有更高优先级条件满足时出现。',
+      priority: '可被 Hot、Mindblown、Sleepy、Goodnight、Thinking 覆盖。',
+      behavior: 'Idle 呼吸浮动配合温和的状态 accent：微微左右摆动和上下浮动，整体给人轻松愉悦的感觉。',
+      hasGaze: true,
+      bubble: false
+    },
+    {
+      id: 'sad',
+      char: '\u{1F622}',
+      zh: '\u96BE\u8FC7',
+      en: 'Sad',
+      auto: false,
+      trigger: '当前仅支持手动选择。',
+      priority: '手动状态，不参与自动竞争。',
+      behavior: '轻微的下沉感，尺度微微收缩，带有缓慢的左右漂移，呈现出低落的情绪。',
+      hasGaze: true,
+      bubble: false
+    },
+    {
+      id: 'angry',
+      char: '\u{1F620}',
+      zh: '\u751F\u6C14',
+      en: 'Angry',
+      auto: false,
+      trigger: '当前仅支持手动选择。',
+      priority: '手动状态，不参与自动竞争。',
+      behavior: '快速的尺度抖动和横向震动，整体姿态紧绷，表现出强烈的情绪波动。',
+      hasGaze: true,
+      bubble: false
+    },
+    {
+      id: 'sleepy',
+      char: '\u{1F634}',
+      zh: '\u56F0\u5026',
+      en: 'Sleepy',
+      auto: true,
+      trigger: '当系统空闲时间超过阈值时触发。',
+      priority: '可被 Hot 和 Mindblown 覆盖。',
+      behavior: '闭眼状态，不使用方向变体。表情会随光标方向做轻微的“点头”式平移，并伴有缓慢的呼吸下沉。',
+      hasGaze: false,
+      bubble: false
+    },
+    {
+      id: 'thinking',
+      char: '\u{1F914}',
+      zh: '\u601D\u8003',
+      en: 'Thinking',
+      auto: true,
+      trigger: '白天工作时段（10:00–17:59）自动出现。',
+      priority: '可被 Hot、Mindblown、Sleepy、Goodnight 覆盖。',
+      behavior: '幅度很小的左右摆动，表现出一种“犹豫”的律动感，适合工作中的专注场景。',
+      hasGaze: true,
+      bubble: false
+    },
+    {
+      id: 'hot',
+      char: '\u{1F975}',
+      zh: '\u70ED',
+      en: 'Hot',
+      auto: true,
+      trigger: '当 CPU 使用率超过阈值时触发。',
+      priority: '最高优先级自动状态。',
+      behavior: '快速的上下弹跳和尺度收缩，模拟发热时的躁动。预览顶部显示示例气泡提示 CPU 占用。',
+      hasGaze: true,
+      bubble: true,
+      bubbleLabel: 'CPU 72%'
+    },
+    {
+      id: 'mindblown',
+      char: '\u{1F92F}',
+      zh: '\u5D29\u6E83',
+      en: 'Mindblown',
+      auto: true,
+      trigger: '当内存使用率超过阈值时触发。',
+      priority: '仅次于 Hot 的自动状态。',
+      behavior: '头部微微缩小并上移，伴有快速的左右晃动，表现出震惊感。预览顶部显示示例气泡提示 MEM 占用。',
+      hasGaze: true,
+      bubble: true,
+      bubbleLabel: 'MEM 84%'
+    },
+    {
+      id: 'goodnight',
+      char: '\u{1F60C}',
+      zh: '\u665A\u5B89',
+      en: 'Goodnight',
+      auto: true,
+      trigger: '深夜时段（22:00–05:59）自动出现。',
+      priority: '可被 Hot、Mindblown、Sleepy 覆盖。',
+      behavior: '闭眼状态，动作幅度最小，仅有极轻微的呼吸浮动。光标靠近时会引发非常微弱的“点头”回应。',
+      hasGaze: false,
+      bubble: false
+    }
+  ];
+
+  const ASSET_BASE = '../../assets/emoji/';
+  const STORAGE_KEY = 'deskemoji-review-board-feedback';
+  let savedData = {};
+  try {
+    savedData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  } catch (e) {
+    savedData = {};
+  }
+
+  // ---------- Gaze / Animation math (ported from renderer.rs) ----------
+
+  function gazeFromPointerDelta(dx, dy) {
+    const horizontal = dx <= -18 ? -1 : dx >= 18 ? 1 : 0;
+    const vertical   = dy <= -22 ? -1 : dy >= 24 ? 1 : 0;
+    const map = {
+      '-1,-1': 'ul', '0,-1': 'up', '1,-1': 'ur',
+      '-1,0': 'left', '0,0': 'center', '1,0': 'right',
+      '-1,1': 'dl', '0,1': 'down', '1,1': 'dr'
+    };
+    return map[`${horizontal},${vertical}`] || 'center';
+  }
+
+  function normalizeCursorDelta(delta, deadzone, fullScale) {
+    const distance = Math.abs(delta);
+    if (distance <= deadzone) return 0;
+    const usable = (distance - deadzone) / (fullScale - deadzone);
+    return Math.min(1, Math.max(0, usable)) * Math.sign(delta);
+  }
+
+  function computeIdleTransform(t) {
+    const offsetY = Math.sin(t * 1.8) * 2.5;
+    const scale = 1.0 + Math.sin(t * 1.8 + 0.7) * 0.02;
+    return { scale, offsetX: 0, offsetY };
+  }
+
+  function computeStateAccentTransform(state, t) {
+    switch (state) {
+      case 'happy':
+        return {
+          scale: 1.0 + Math.sin(t * 1.4) * 0.004,
+          offsetX: Math.sin(t * 0.7) * 0.15,
+          offsetY: Math.sin(t * 1.4) * 0.28
+        };
+      case 'sad':
+        return {
+          scale: 1.0 - (Math.sin(t * 0.85) + 1.0) * 0.003,
+          offsetX: Math.sin(t * 0.55) * 0.08,
+          offsetY: 0.22 + Math.sin(t * 0.85 + 1.2) * 0.18
+        };
+      case 'angry':
+        return {
+          scale: 1.0 - Math.abs(Math.sin(t * 1.8)) * 0.008,
+          offsetX: Math.sin(t * 1.1) * 0.18,
+          offsetY: Math.abs(Math.sin(t * 1.8)) * 0.36
+        };
+      case 'sleepy':
+        return {
+          scale: 1.0 - (Math.sin(t * 0.72) + 1.0) * 0.004,
+          offsetX: Math.sin(t * 0.36) * 0.08,
+          offsetY: Math.sin(t * 0.72) * 0.44
+        };
+      case 'thinking':
+        return {
+          scale: 1.0 + Math.sin(t * 0.92) * 0.003,
+          offsetX: Math.sin(t * 0.92) * 0.3,
+          offsetY: Math.sin(t * 0.92 + 0.8) * 0.18
+        };
+      case 'hot':
+        return {
+          scale: 1.0 - Math.abs(Math.sin(t * 3.2)) * 0.012,
+          offsetX: Math.sin(t * 1.6) * 0.22,
+          offsetY: Math.sin(t * 3.2) * 0.95
+        };
+      case 'mindblown':
+        return {
+          scale: 1.0 - 0.006 - Math.abs(Math.sin(t * 2.0)) * 0.01,
+          offsetX: Math.sin(t * 2.8) * 0.14,
+          offsetY: -0.38 - Math.abs(Math.sin(t * 2.0)) * 0.32
+        };
+      case 'goodnight':
+        return {
+          scale: 1.0 - (Math.sin(t * 0.54) + 1.0) * 0.0025,
+          offsetX: Math.sin(t * 0.28) * 0.04,
+          offsetY: Math.sin(t * 0.54) * 0.2
+        };
+      default:
+        return { scale: 1.0, offsetX: 0, offsetY: 0 };
+    }
+  }
+
+  function computeClosedEyeResponse(state, dx, dy, t) {
+    const params = state === 'sleepy'
+      ? { maxX: 3.0, maxY: 1.5, nod: 1.0 }
+      : { maxX: 1.7, maxY: 0.85, nod: 0.55 };
+    const h = normalizeCursorDelta(dx, 24.0, 160.0);
+    const v = normalizeCursorDelta(dy, 24.0, 180.0);
+    const attention = Math.max(Math.abs(h), Math.abs(v));
+    const nod = Math.sin(t * 2.2) * params.nod * attention;
+    return { scale: 1.0, offsetX: h * params.maxX, offsetY: v * params.maxY + nod };
+  }
+
+  // ---------- Build DOM ----------
+
+  const board = document.getElementById('board');
+  const previews = [];
+
+  STATES.forEach((st, index) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.state = st.id;
+
+    const bubbleHtml = st.bubble
+      ? `<div class="bubble" aria-hidden="true"><div class="bubble-inner">${st.bubbleLabel}</div></div>`
+      : '';
+
+    const saved = savedData[st.id] || {};
+
+    card.innerHTML = `
+      <div class="preview" data-state="${st.id}">
+        <img src="${ASSET_BASE}${st.id}.png" alt="${st.en}">
+        ${bubbleHtml}
+      </div>
+      <div class="info">
+        <div class="title-row">
+          <div class="emoji-char">${st.char}</div>
+          <div class="title-text">
+            <h3>${st.zh} <span class="name-en">${st.en}</span></h3>
+            <span class="badge ${st.auto ? 'auto' : 'manual'}">${st.auto ? '自动' : '手动'}</span>
+          </div>
+        </div>
+        <div class="desc">
+          <p><strong>触发：</strong>${st.trigger}</p>
+          <p><strong>行为：</strong>${st.behavior}</p>
+          <p class="priority-note">${st.priority}</p>
+        </div>
+        <div class="feedback">
+          <div class="feedback-row">
+            <select class="status-select" data-state="${st.id}" aria-label="审查状态">
+              <option value="" ${!saved.status ? 'selected' : ''}>状态</option>
+              <option value="保留" ${saved.status === '保留' ? 'selected' : ''}>保留</option>
+              <option value="待改" ${saved.status === '待改' ? 'selected' : ''}>待改</option>
+              <option value="问题大" ${saved.status === '问题大' ? 'selected' : ''}>问题大</option>
+            </select>
+            <span class="saved-hint" id="hint-${st.id}">已保存</span>
+          </div>
+          <textarea class="note-input" data-state="${st.id}" rows="3" placeholder="在此输入反馈…">${saved.note || ''}</textarea>
+        </div>
+      </div>
+    `;
+    board.appendChild(card);
+
+    const previewEl = card.querySelector('.preview');
+    const imgEl = previewEl.querySelector('img');
+    previews.push({ state: st.id, previewEl, imgEl, hasGaze: st.hasGaze, index });
+  });
+
+  // ---------- Interactions ----------
+
+  const gazeState = new Map(); // stateId -> { dx, dy, active }
+
+  previews.forEach(({ state, previewEl, hasGaze }) => {
+    gazeState.set(state, { dx: 0, dy: 0, active: false });
+
+    previewEl.addEventListener('mousemove', (e) => {
+      const rect = previewEl.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      gazeState.set(state, { dx: e.clientX - cx, dy: e.clientY - cy, active: true });
+    });
+
+    previewEl.addEventListener('mouseleave', () => {
+      gazeState.set(state, { dx: 0, dy: 0, active: false });
+    });
+  });
+
+  // ---------- Animation loop ----------
+
+  let startTime = performance.now();
+  function frame(now) {
+    const tGlobal = (now - startTime) / 1000;
+
+    previews.forEach(({ state, imgEl, hasGaze }) => {
+      const idle = computeIdleTransform(tGlobal);
+      // Intensity: preview is always "hovered" in the review board context
+      const intensity = 0.75;
+      idle.offsetY *= intensity;
+      idle.scale = 1.0 + (idle.scale - 1.0) * intensity;
+
+      const accent = computeStateAccentTransform(state, tGlobal);
+      let totalScale = idle.scale * accent.scale;
+      let totalX = idle.offsetX + accent.offsetX;
+      let totalY = idle.offsetY + accent.offsetY;
+
+      const gaze = gazeState.get(state);
+      if (!hasGaze) {
+        if (gaze && gaze.active) {
+          const closed = computeClosedEyeResponse(state, gaze.dx, gaze.dy, tGlobal);
+          totalX += closed.offsetX;
+          totalY += closed.offsetY;
+        }
+      } else {
+        if (gaze && gaze.active) {
+          const dir = gazeFromPointerDelta(gaze.dx, gaze.dy);
+          const suffix = dir === 'center' ? 'center' : dir;
+          const expectedSrc = `${ASSET_BASE}${state}-${suffix}.png`;
+          if (imgEl.src !== expectedSrc) {
+            imgEl.src = expectedSrc;
+          }
+        } else {
+          const expectedSrc = `${ASSET_BASE}${state}-center.png`;
+          if (imgEl.src !== expectedSrc) {
+            imgEl.src = expectedSrc;
+          }
+        }
+      }
+
+      imgEl.style.transform = `translate(${totalX.toFixed(2)}px, ${totalY.toFixed(2)}px) scale(${totalScale.toFixed(4)})`;
+    });
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---------- Persistence ----------
+
+  function saveState(stateId, key, value) {
+    if (!savedData[stateId]) savedData[stateId] = {};
+    savedData[stateId][key] = value;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedData));
+    } catch (e) {
+      // ignore
+    }
+    const hint = document.getElementById(`hint-${stateId}`);
+    if (hint) {
+      hint.classList.add('visible');
+      setTimeout(() => hint.classList.remove('visible'), 1200);
+    }
+  }
+
+  document.querySelectorAll('.status-select').forEach(sel => {
+    sel.addEventListener('change', (e) => saveState(e.target.dataset.state, 'status', e.target.value));
+  });
+
+  document.querySelectorAll('.note-input').forEach(ta => {
+    let timeout;
+    ta.addEventListener('input', (e) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => saveState(e.target.dataset.state, 'note', e.target.value), 300);
+    });
+  });
+
+  // ---------- Export ----------
+
+  function buildExportPayload() {
+    const timestamp = new Date().toISOString();
+    const entries = STATES.map(st => {
+      const data = savedData[st.id] || {};
+      return {
+        stateId: st.id,
+        chineseLabel: st.zh,
+        emojiChar: st.char,
+        triggerSummary: st.trigger,
+        autoSelected: st.auto,
+        reviewerStatus: data.status || '',
+        reviewerNote: data.note || ''
+      };
+    });
+    return { exportedAt: timestamp, entries };
+  }
+
+  function downloadFile(filename, content, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('export-json').addEventListener('click', () => {
+    const payload = buildExportPayload();
+    downloadFile(`deskemoji-review-${payload.exportedAt.slice(0,10)}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  });
+
+  document.getElementById('export-md').addEventListener('click', () => {
+    const payload = buildExportPayload();
+    let md = `# Deskemoji Emoji State Review\n\n**导出时间：** ${payload.exportedAt}\n\n`;
+    md += '| 状态 | Emoji | 自动 | 触发条件 | 审查状态 | 备注 |\n';
+    md += '|------|-------|------|----------|----------|------|\n';
+    payload.entries.forEach(e => {
+      md += `| ${e.chineseLabel} | ${e.emojiChar} | ${e.autoSelected ? '是' : '否'} | ${escapeMd(e.triggerSummary)} | ${e.reviewerStatus || '-'} | ${escapeMd(e.reviewerNote)} |\n`;
+    });
+    downloadFile(`deskemoji-review-${payload.exportedAt.slice(0,10)}.md`, md, 'text/markdown');
+  });
+
+  function escapeMd(text) {
+    return text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  }
+})();
+</script>
+</body>
+</html>

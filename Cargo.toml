@@ -3,12 +3,18 @@ name = "deskemoji"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "deskemoji"
+path = "src/main.rs"
+test = false
+
 [dependencies]
 winit = "0.29"
 softbuffer = "0.4"
 sysinfo = "0.30"
 chrono = "0.4"
 tray-icon = "0.11"
+image = { version = "0.24", default-features = false, features = ["png"] }
 windows = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
@@ -16,6 +22,7 @@ windows = { version = "0.52", features = [
     "Win32_System_Registry",
     "Win32_UI_Controls",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_HiDpi",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
