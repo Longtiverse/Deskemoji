@@ -14,7 +14,7 @@ pub struct EmojiAssets {
     variants: [[Option<EmojiImage>; 9]; 8],
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EmojiId {
     Happy,
     Sad,

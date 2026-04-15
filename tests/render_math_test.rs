@@ -1,9 +1,9 @@
 use deskemoji::emoji_assets::{EmojiId, EmojiImage};
 use deskemoji::renderer::{
     bubble_visual_scale, compute_bubble_anchor, compute_bubble_rect, compute_closed_eye_response,
-    convert_argb_to_premultiplied_bgra, compute_idle_transform, compute_sprite_center, compute_sprite_rect,
-    compute_state_accent_transform, resize_image_high_quality, sample_bilinear_rgba,
-    sample_resampled_rgba, SpriteRect,
+    compute_idle_transform, compute_sprite_center, compute_sprite_rect,
+    compute_state_accent_transform, convert_argb_to_premultiplied_bgra, resize_image_high_quality,
+    sample_bilinear_rgba, sample_resampled_rgba, SpriteRect,
 };
 
 #[test]
@@ -96,9 +96,7 @@ fn convert_argb_to_premultiplied_bgra_matches_layered_window_format() {
 
     assert_eq!(
         converted,
-        vec![
-            8, 16, 32, 128, 64, 128, 255, 255, 0, 0, 0, 0,
-        ]
+        vec![8, 16, 32, 128, 64, 128, 255, 255, 0, 0, 0, 0,]
     );
 }
 

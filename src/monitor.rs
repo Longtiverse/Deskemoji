@@ -124,5 +124,4 @@ impl Monitor {
     pub fn get_resource_state(&self) -> ResourceState {
         self.resource_state
     }
-
 }

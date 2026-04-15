@@ -8,15 +8,22 @@ use std::rc::Rc;
 use windows::Win32::Foundation::{COLORREF, HANDLE, HWND, POINT, SIZE};
 use windows::Win32::Graphics::Gdi::{
     CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject, AC_SRC_ALPHA,
-    AC_SRC_OVER, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BLENDFUNCTION, DIB_RGB_COLORS, HBITMAP, HDC,
+    AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HBITMAP, HDC,
     HGDIOBJ, RGBQUAD,
 };
-use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowLongPtrW, UpdateLayeredWindow, GWL_EXSTYLE, ULW_ALPHA,
-    WS_EX_LAYERED,
+use windows::Win32::Graphics::Imaging::{
+    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppPBGRA, IWICBitmapScaler, IWICImagingFactory,
+    WICBitmapInterpolationModeHighQualityCubic,
 };
-use winit::window::Window;
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetWindowLongPtrW, GetWindowRect, SetWindowLongPtrW, UpdateLayeredWindow, GWL_EXSTYLE,
+    ULW_ALPHA, WS_EX_LAYERED,
+};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use winit::window::Window;
 
 const BASE_SPRITE_RATIO: f32 = 0.78;
 const BASE_SPRITE_MAX_SIZE: u32 = 180;
@@ -139,7 +146,12 @@ pub struct BubbleOverlay {
 }
 
 impl BubbleOverlay {
-    pub fn for_state(state: EmojiId, cpu_usage: u8, memory_usage: u8, elapsed_secs: u64) -> Option<Self> {
+    pub fn for_state(
+        state: EmojiId,
+        cpu_usage: u8,
+        memory_usage: u8,
+        elapsed_secs: u64,
+    ) -> Option<Self> {
         match state {
             EmojiId::Hot | EmojiId::Mindblown => {
                 let show_cpu = (elapsed_secs / 5) % 2 == 0;
@@ -168,9 +180,117 @@ pub struct BubbleRect {
     pub tail_tip_y: i32,
 }
 
+struct TextRenderer {
+    font: fontdue::Font,
+    font_size: f32,
+    line_height: f32,
+}
+
+impl TextRenderer {
+    fn from_bytes(bytes: &[u8], font_size: f32) -> Option<Self> {
+        fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default())
+            .ok()
+            .map(|font| {
+                let line_height = font_size * 1.2;
+                Self { font, font_size, line_height }
+            })
+    }
+
+    fn layout_text(&self, text: &str, max_width: f32) -> (f32, f32, Vec<String>) {
+        let mut lines = Vec::new();
+        let mut current_line = String::new();
+        let mut current_width = 0.0f32;
+        let mut max_line_width = 0.0f32;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                max_line_width = max_line_width.max(current_width);
+                lines.push(current_line.clone());
+                current_line.clear();
+                current_width = 0.0;
+                continue;
+            }
+            let (metrics, _) = self.font.rasterize(ch, self.font_size);
+            let advance = metrics.advance_width;
+            if current_width + advance > max_width && !current_line.is_empty() {
+                max_line_width = max_line_width.max(current_width);
+                lines.push(current_line.clone());
+                current_line.clear();
+                current_width = 0.0;
+            }
+            current_line.push(ch);
+            current_width += advance;
+        }
+        if !current_line.is_empty() {
+            max_line_width = max_line_width.max(current_width);
+            lines.push(current_line);
+        }
+        if lines.is_empty() {
+            lines.push(String::new());
+        }
+
+        let total_height = lines.len() as f32 * self.line_height;
+        (max_line_width, total_height, lines)
+    }
+
+    fn draw_text(
+        &self,
+        buf: &mut [u32],
+        surface_width: u32,
+        surface_height: u32,
+        text: &str,
+        left: i32,
+        top: i32,
+        color: u32,
+        alpha: u8,
+    ) {
+        let r = ((color >> 16) & 0xFF) as u8;
+        let g = ((color >> 8) & 0xFF) as u8;
+        let b = (color & 0xFF) as u8;
+
+        let mut cursor_x = left as f32;
+        let baseline_y = top as f32 + self.font_size * 0.8;
+        let mut line_baseline_y = baseline_y;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                cursor_x = left as f32;
+                line_baseline_y += self.line_height;
+                continue;
+            }
+            let (metrics, bitmap) = self.font.rasterize(ch, self.font_size);
+            let glyph_width = metrics.width;
+            let glyph_height = metrics.height;
+            if glyph_width > 0 && glyph_height > 0 {
+                let draw_x = cursor_x + metrics.xmin as f32;
+                let draw_y = line_baseline_y - (self.font_size * 0.8) as f32 + metrics.ymin as f32;
+
+                for gy in 0..glyph_height {
+                    for gx in 0..glyph_width {
+                        let coverage = bitmap[gy * glyph_width + gx];
+                        if coverage == 0 {
+                            continue;
+                        }
+                        let px = (draw_x + gx as f32).round() as i32;
+                        let py = (draw_y + gy as f32).round() as i32;
+                        if px < 0 || py < 0 || px >= surface_width as i32 || py >= surface_height as i32 {
+                            continue;
+                        }
+                        let idx = (py as u32 * surface_width + px as u32) as usize;
+                        let glyph_alpha = ((coverage as u16 * alpha as u16 + 127) / 255) as u8;
+                        buf[idx] = blend_argb(buf[idx], r, g, b, glyph_alpha);
+                    }
+                }
+            }
+            cursor_x += metrics.advance_width;
+        }
+    }
+}
+
 pub struct Renderer {
     presenter: LayeredWindowPresenter,
     scaled_cache: HashMap<ScaledSpriteKey, EmojiImage>,
+    text_renderer: Option<TextRenderer>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -184,10 +304,29 @@ impl Renderer {
     pub fn new(window: Rc<Window>) -> Self {
         let hwnd = window_hwnd(&window).expect("Deskemoji requires a Win32 window handle");
         let presenter = LayeredWindowPresenter::new(hwnd);
+        let font_bytes = Self::load_font_bytes();
+        let text_renderer = font_bytes.and_then(|b| TextRenderer::from_bytes(&b, 14.0));
         Self {
             presenter,
             scaled_cache: HashMap::new(),
+            text_renderer,
         }
+    }
+
+    fn load_font_bytes() -> Option<Vec<u8>> {
+        let custom = std::path::Path::new("assets/fonts/DeskemojiDialogue.ttf");
+        if custom.exists() {
+            return std::fs::read(custom).ok();
+        }
+        let custom2 = std::path::Path::new("assets/fonts/font.ttf");
+        if custom2.exists() {
+            return std::fs::read(custom2).ok();
+        }
+        let system = std::path::Path::new("C:\\Windows\\Fonts\\msyh.ttc");
+        if system.exists() {
+            return std::fs::read(system).ok();
+        }
+        None
     }
 
     pub fn render_layers(
@@ -235,7 +374,7 @@ impl Renderer {
 
         if let (Some(bubble), Some(sprite_rect)) = (bubble, top_rect) {
             let (anchor_x, anchor_y) = compute_bubble_anchor(sprite_rect);
-            draw_bubble(
+            self.draw_bubble(
                 &mut buf,
                 size.width,
                 size.height,
@@ -269,7 +408,10 @@ impl LayeredWindowPresenter {
         }
 
         let memory_dc = unsafe { CreateCompatibleDC(HDC(0)) };
-        assert!(memory_dc.0 != 0, "failed to create layered window memory DC");
+        assert!(
+            memory_dc.0 != 0,
+            "failed to create layered window memory DC"
+        );
 
         Self {
             hwnd,
@@ -287,9 +429,18 @@ impl LayeredWindowPresenter {
         self.ensure_bitmap(width, height);
         self.upload = convert_argb_to_premultiplied_bgra(pixels);
         unsafe {
-            copy_nonoverlapping(self.upload.as_ptr(), self.bits.cast::<u8>(), self.upload.len());
+            copy_nonoverlapping(
+                self.upload.as_ptr(),
+                self.bits.cast::<u8>(),
+                self.upload.len(),
+            );
 
-            let destination = POINT { x: 0, y: 0 };
+            let mut window_rect = windows::Win32::Foundation::RECT::default();
+            let _ = GetWindowRect(self.hwnd, &mut window_rect);
+            let destination = POINT {
+                x: window_rect.left,
+                y: window_rect.top,
+            };
             let size = SIZE {
                 cx: width as i32,
                 cy: height as i32,
@@ -589,6 +740,18 @@ pub fn resize_image_high_quality(
         return image.clone();
     }
 
+    if let Some(resized) = resize_image_with_wic(image, target_width, target_height) {
+        return resized;
+    }
+
+    resize_image_with_image_crate(image, target_width, target_height)
+}
+
+fn resize_image_with_image_crate(
+    image: &EmojiImage,
+    target_width: u32,
+    target_height: u32,
+) -> EmojiImage {
     let premultiplied_pixels = premultiply_image_pixels(image);
     let premultiplied =
         ImageBuffer::<Rgba<u8>, _>::from_raw(image.width, image.height, premultiplied_pixels)
@@ -606,6 +769,50 @@ pub fn resize_image_high_quality(
         width: target_width,
         height: target_height,
         pixels,
+    }
+}
+
+fn resize_image_with_wic(
+    image: &EmojiImage,
+    target_width: u32,
+    target_height: u32,
+) -> Option<EmojiImage> {
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let factory: IWICImagingFactory =
+            CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok()?;
+
+        let premultiplied = premultiply_image_pixels(image);
+        let source = factory
+            .CreateBitmapFromMemory(
+                image.width,
+                image.height,
+                &GUID_WICPixelFormat32bppPBGRA,
+                image.width * 4,
+                &premultiplied,
+            )
+            .ok()?;
+        let scaler: IWICBitmapScaler = factory.CreateBitmapScaler().ok()?;
+        scaler
+            .Initialize(
+                &source,
+                target_width,
+                target_height,
+                WICBitmapInterpolationModeHighQualityCubic,
+            )
+            .ok()?;
+
+        let mut pixels = vec![0; (target_width * target_height * 4) as usize];
+        scaler
+            .CopyPixels(std::ptr::null(), target_width * 4, pixels.as_mut_slice())
+            .ok()?;
+
+        let softened = soften_premultiplied_edges(pixels, target_width, target_height);
+        Some(EmojiImage {
+            width: target_width,
+            height: target_height,
+            pixels: unpremultiply_image_pixels(softened),
+        })
     }
 }
 
@@ -648,71 +855,133 @@ pub fn sample_resampled_rgba(
     ])
 }
 
-fn draw_bubble(
-    buf: &mut [u32],
-    surface_width: u32,
-    surface_height: u32,
-    bubble: &BubbleOverlay,
-    anchor_x: i32,
-    anchor_y: i32,
-    sprite_width: u32,
-) {
-    let bubble_scale = bubble_visual_scale(sprite_width);
-    let font_scale = (FONT_SCALE as f32 * bubble_scale).round().max(2.0) as u32;
-    let padding_x = (8.0 * bubble_scale).round().max(8.0) as i32;
-    let padding_y = (5.0 * bubble_scale).round().max(5.0) as i32;
-    let bubble_height = (BUBBLE_HEIGHT as f32 * bubble_scale).round() as u32;
-    let text_width = bubble_text_width(&bubble.label, font_scale);
-    let bubble_width = text_width + (padding_x as u32 * 2);
-    let rect = compute_bubble_rect(
-        surface_width,
-        surface_height,
-        anchor_x,
-        anchor_y,
-        bubble_width,
-        bubble_height,
-    );
+impl Renderer {
+    fn draw_bubble(
+        &self,
+        buf: &mut [u32],
+        surface_width: u32,
+        surface_height: u32,
+        bubble: &BubbleOverlay,
+        anchor_x: i32,
+        anchor_y: i32,
+        sprite_width: u32,
+    ) {
+        let bubble_scale = bubble_visual_scale(sprite_width);
+        let padding_x = (8.0 * bubble_scale).round().max(8.0) as i32;
+        let padding_y = (5.0 * bubble_scale).round().max(5.0) as i32;
 
-    fill_rounded_rect(
-        buf,
-        surface_width,
-        surface_height,
-        rect.left,
-        rect.top,
-        rect.width,
-        rect.height,
-        8,
-        0xF9F5F1,
-        232,
-    );
-    stroke_rounded_rect(
-        buf,
-        surface_width,
-        surface_height,
-        rect.left,
-        rect.top,
-        rect.width,
-        rect.height,
-        8,
-        0xD5C2B4,
-        255,
-    );
-    fill_tail(buf, surface_width, surface_height, rect, 0xF9F5F1, 232);
-    stroke_tail(buf, surface_width, surface_height, rect, 0xD5C2B4, 255);
+        if let Some(ref tr) = self.text_renderer {
+            let max_text_width = (surface_width as f32 * 0.85).min(180.0);
+            let (text_width, text_height, lines) = tr.layout_text(&bubble.label, max_text_width);
+            let bubble_width = (text_width + padding_x as f32 * 2.0).ceil() as u32;
+            let bubble_height = (text_height + padding_y as f32 * 2.0).ceil() as u32;
+            let rect = compute_bubble_rect(
+                surface_width,
+                surface_height,
+                anchor_x,
+                anchor_y,
+                bubble_width,
+                bubble_height,
+            );
 
-    let text_x = rect.left + padding_x;
-    let text_y = rect.top + padding_y;
-    draw_bitmap_text(
-        buf,
-        surface_width,
-        surface_height,
-        text_x,
-        text_y,
-        &bubble.label,
-        0xB84747,
-        255,
-        font_scale,
-    );
+            fill_rounded_rect(
+                buf,
+                surface_width,
+                surface_height,
+                rect.left,
+                rect.top,
+                rect.width,
+                rect.height,
+                8,
+                0xF9F5F1,
+                232,
+            );
+            stroke_rounded_rect(
+                buf,
+                surface_width,
+                surface_height,
+                rect.left,
+                rect.top,
+                rect.width,
+                rect.height,
+                8,
+                0xD5C2B4,
+                255,
+            );
+            fill_tail(buf, surface_width, surface_height, rect, 0xF9F5F1, 232);
+            stroke_tail(buf, surface_width, surface_height, rect, 0xD5C2B4, 255);
+
+            let text_x = rect.left + padding_x;
+            let text_y = rect.top + padding_y;
+            for (i, line) in lines.iter().enumerate() {
+                let line_y = text_y + (i as f32 * tr.line_height).round() as i32;
+                tr.draw_text(
+                    buf,
+                    surface_width,
+                    surface_height,
+                    line,
+                    text_x,
+                    line_y,
+                    0xB84747,
+                    255,
+                );
+            }
+        } else {
+            let font_scale = (FONT_SCALE as f32 * bubble_scale).round().max(2.0) as u32;
+            let bubble_height = (BUBBLE_HEIGHT as f32 * bubble_scale).round() as u32;
+            let text_width = bubble_text_width(&bubble.label, font_scale);
+            let bubble_width = text_width + (padding_x as u32 * 2);
+            let rect = compute_bubble_rect(
+                surface_width,
+                surface_height,
+                anchor_x,
+                anchor_y,
+                bubble_width,
+                bubble_height,
+            );
+
+            fill_rounded_rect(
+                buf,
+                surface_width,
+                surface_height,
+                rect.left,
+                rect.top,
+                rect.width,
+                rect.height,
+                8,
+                0xF9F5F1,
+                232,
+            );
+            stroke_rounded_rect(
+                buf,
+                surface_width,
+                surface_height,
+                rect.left,
+                rect.top,
+                rect.width,
+                rect.height,
+                8,
+                0xD5C2B4,
+                255,
+            );
+            fill_tail(buf, surface_width, surface_height, rect, 0xF9F5F1, 232);
+            stroke_tail(buf, surface_width, surface_height, rect, 0xD5C2B4, 255);
+
+            let text_x = rect.left + padding_x;
+            let text_y = rect.top + padding_y;
+            draw_bitmap_text(
+                buf,
+                surface_width,
+                surface_height,
+                text_x,
+                text_y,
+                &bubble.label,
+                0xB84747,
+                255,
+                font_scale,
+            );
+        }
+    }
 }
 
 fn ensure_scaled_sprite(

@@ -35,6 +35,26 @@ Get-ChildItem -Path $AssetsDir -Filter "*.png" | ForEach-Object {
     Copy-Item $_.FullName $EmojiDest
 }
 
+# Copy fonts if present
+$FontsDir = Join-Path $ProjectRoot "assets\fonts"
+if (Test-Path $FontsDir) {
+    $FontsDest = Join-Path $TempDir "assets\fonts"
+    New-Item -ItemType Directory -Path $FontsDest | Out-Null
+    Get-ChildItem -Path $FontsDir | ForEach-Object {
+        Copy-Item $_.FullName $FontsDest
+    }
+}
+
+# Copy dialogue presets if present
+$DialoguesDir = Join-Path $ProjectRoot "assets\dialogues"
+if (Test-Path $DialoguesDir) {
+    $DialoguesDest = Join-Path $TempDir "assets\dialogues"
+    New-Item -ItemType Directory -Path $DialoguesDest | Out-Null
+    Get-ChildItem -Path $DialoguesDir | ForEach-Object {
+        Copy-Item $_.FullName $DialoguesDest
+    }
+}
+
 Compress-Archive -Path "$TempDir\*" -DestinationPath $ZipPath -Force
 Remove-Item -Recurse -Force $TempDir
 
@@ -44,5 +64,7 @@ Write-Host "  Output: $ZipPath"
 Write-Host "  Contents:"
 Write-Host "    - deskemoji.exe"
 Write-Host "    - assets/emoji/ ($pngCount PNG files)"
+if (Test-Path $FontsDir) { Write-Host "    - assets/fonts/ (font files)" }
+if (Test-Path $DialoguesDir) { Write-Host "    - assets/dialogues/ (preset lines)" }
 Write-Host ""
 Write-Host "USAGE: Extract the ZIP to any folder and double-click deskemoji.exe to run." -ForegroundColor Cyan

@@ -21,6 +21,10 @@ pub struct Config {
     pub angry_base_duration_secs: u64,
     pub angry_click_extend_secs: u64,
     pub angry_click_max_duration_secs: u64,
+    // 新增：对话气泡配置
+    pub dialogue_enabled: bool,
+    pub dialogue_duration_secs: u64,
+    pub dialogue_interval_secs: u64,
 }
 
 impl Default for Config {
@@ -42,6 +46,9 @@ impl Default for Config {
             angry_base_duration_secs: 5,
             angry_click_extend_secs: 2,
             angry_click_max_duration_secs: 15,
+            dialogue_enabled: true,
+            dialogue_duration_secs: 5,
+            dialogue_interval_secs: 60,
         }
     }
 }

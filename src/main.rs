@@ -18,6 +18,7 @@ use winit::{
 
 use config::Config;
 use deskemoji::app_hang_detector::AppHangDetector;
+use deskemoji::dialogue::DialogueManager;
 use deskemoji::emoji_assets::{EmojiAssets, EmojiId};
 use deskemoji::input_monitor::{InputLevel, InputMonitor};
 use deskemoji::renderer::{
@@ -63,6 +64,7 @@ struct App {
     last_emoji_change: Instant,
     wake_up_angry_until: Option<Instant>,
     wake_up_click_count: u32,
+    dialogue: DialogueManager,
 }
 
 impl App {
@@ -78,6 +80,11 @@ impl App {
             config.mindblown_memory_threshold,
         );
         let auto_mode = config.auto_mode;
+        let dialogue = DialogueManager::with_config(
+            config.dialogue_enabled,
+            config.dialogue_duration_secs,
+            config.dialogue_interval_secs,
+        );
 
         let mut app = Self {
             window,
@@ -103,11 +110,13 @@ impl App {
             last_emoji_change: Instant::now() - Duration::from_secs(10),
             wake_up_angry_until: None,
             wake_up_click_count: 0,
+            dialogue,
         };
 
         if app.auto_mode {
             let initial = app.resolve_auto_emoji();
             app.set_current_emoji(initial, false, true);
+            app.dialogue.trigger_by_state(initial);
         }
 
         app
@@ -182,6 +191,7 @@ impl App {
 
         self.current_emoji = emoji;
         self.last_emoji_change = Instant::now();
+        self.dialogue.trigger_by_state(emoji);
     }
 
     fn trigger_bounce(&mut self) {
@@ -201,8 +211,8 @@ impl App {
     fn wake_up_emoji(&mut self) {
         self.wake_up_click_count += 1;
         let base = Duration::from_secs(self.config.angry_base_duration_secs);
-        let extend =
-            Duration::from_secs(self.config.angry_click_extend_secs) * self.wake_up_click_count.saturating_sub(1);
+        let extend = Duration::from_secs(self.config.angry_click_extend_secs)
+            * self.wake_up_click_count.saturating_sub(1);
         let max_dur = Duration::from_secs(self.config.angry_click_max_duration_secs);
         let total = base + extend;
         let total = total.min(max_dur);
@@ -212,6 +222,7 @@ impl App {
         let intensity = 1.0 + (self.wake_up_click_count as f32 * 0.3).min(1.5);
         self.trigger_shake(intensity);
         self.set_current_emoji(EmojiId::Angry, true, true);
+        self.dialogue.trigger_by_click(EmojiId::Angry, self.wake_up_click_count);
     }
 
     fn update_animation(&mut self) {
@@ -241,6 +252,8 @@ impl App {
                 let next_emoji = self.resolve_auto_emoji();
                 self.set_current_emoji(next_emoji, true, false);
             }
+
+            self.dialogue.trigger_idle(self.current_emoji);
 
             self.last_update = Instant::now();
         }
@@ -292,9 +305,12 @@ impl App {
             .base_transform()
             .combine(self.closed_eye_response_transform());
         let progress = ease_out_cubic(self.transition_progress());
-        let mut layers = Vec::with_capacity(2);
         let gaze = self.current_gaze_direction();
 
+        // Compute bubble before building layers to avoid borrow issues
+        let bubble = self.current_bubble_overlay();
+
+        let mut layers = Vec::with_capacity(2);
         if let Some(previous) = self.previous_emoji {
             let previous_image = self.assets.get_variant(previous, gaze).unwrap();
             layers.push(RenderLayer {
@@ -324,7 +340,6 @@ impl App {
             ),
         });
 
-        let bubble = self.current_bubble_overlay();
         self.renderer
             .render_layers(&self.window, &layers, bubble.as_ref());
         self.finish_transition_if_needed();
@@ -340,7 +355,13 @@ impl App {
         GazeDirection::from_pointer_delta(cursor_x - center_x, cursor_y - center_y)
     }
 
-    fn current_bubble_overlay(&self) -> Option<BubbleOverlay> {
+    fn current_bubble_overlay(&mut self) -> Option<BubbleOverlay> {
+        if let Some(line) = self.dialogue.update() {
+            return Some(BubbleOverlay {
+                label: line.to_string(),
+            });
+        }
+
         let info = self.monitor.get_info();
         let elapsed = self.animation_started_at.elapsed().as_secs();
         BubbleOverlay::for_state(
@@ -661,6 +682,7 @@ fn main() {
                                 app.trigger_bounce();
                                 let _ = app.window.drag_window();
                                 app.last_activity = Instant::now();
+                                app.dialogue.trigger_by_click(app.current_emoji, 0);
                             }
                         }
                     }

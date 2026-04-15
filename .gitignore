@@ -1,5 +1,5 @@
 /target/
-/worktrees/
+/.worktrees/
 .superpowers/
 .review-data/
 __pycache__/
